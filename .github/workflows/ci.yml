@@ -27,11 +27,8 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
-        env:
-          UV_INDEX_KRV_RESEARCH_USERNAME: __token__
-          UV_INDEX_KRV_RESEARCH_PASSWORD: ${{ secrets.PYX_API_KEY }}
         run: |
-          uv sync --all-extras
+          uv sync --all-extras --no-sources
 
       - name: Lint with Ruff
         run: |
@@ -65,7 +62,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --all-extras
+          uv sync --group dev --no-sources
 
       - name: Run tests
         run: |
