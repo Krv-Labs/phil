@@ -49,7 +49,7 @@ class Phil:
     @staticmethod
     def _identify_column_types(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
         categorical_columns = df.select_dtypes(
-            include=["object", "category"]
+            include=["object", "category", "str"]
         ).columns.tolist()
         numerical_columns = df.select_dtypes(
             include=["number", "bool"]
