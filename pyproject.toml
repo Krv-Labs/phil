@@ -8,7 +8,6 @@ description = "Phil: representation-guided multiverse imputation with Rust-backe
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "dect",
     "pandas>=2.2.3",
     "pydantic>=2.10.6",
     "scikit-learn>=1.6.1",
@@ -24,7 +23,6 @@ build-backend = "setuptools.build_meta"
 find = {include = ["phil", "phil.*"]}
 
 [tool.uv.sources]
-dect = { git = "https://github.com/aidos-lab/dect.git" }
 trailed = { index = "krv-research" }
 
 [[tool.uv.index]]
