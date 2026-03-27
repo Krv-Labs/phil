@@ -62,7 +62,7 @@ jobs:
 
       - name: Run tests
         run: |
-          uv run pytest -v
+          uv run --no-sync pytest -v
 
       - name: Test summary
         run: |
