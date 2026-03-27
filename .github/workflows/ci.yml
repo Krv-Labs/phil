@@ -26,17 +26,13 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Install dependencies
-        run: |
-          uv sync --all-extras --no-sources
-
       - name: Lint with Ruff
         run: |
-          uv run ruff check phil/
+          uvx ruff check phil/
 
       - name: Check code formatting with Ruff
         run: |
-          uv run ruff format --check phil/
+          uvx ruff format --check phil/
 
   test:
     runs-on: ubuntu-latest
