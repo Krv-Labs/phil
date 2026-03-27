@@ -7,7 +7,6 @@ import pandas as pd
 from pydantic import BaseModel
 from sklearn.compose import ColumnTransformer
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.pipeline import Pipeline
 
@@ -26,7 +25,9 @@ class Phil:
         config=None,
         random_state=None,
     ):
-        self.config, self.magic = self._configure_magic_method(magic=magic, config=config)
+        self.config, self.magic = self._configure_magic_method(
+            magic=magic, config=config
+        )
         self.samples = samples
         self.param_grid = self._configure_param_grid(param_grid)
         self.random_state = random_state
@@ -49,7 +50,9 @@ class Phil:
         categorical_columns = df.select_dtypes(
             include=["object", "category"]
         ).columns.tolist()
-        numerical_columns = df.select_dtypes(include=["number", "bool"]).columns.tolist()
+        numerical_columns = df.select_dtypes(
+            include=["number", "bool"]
+        ).columns.tolist()
         return categorical_columns, numerical_columns
 
     def _create_imputers(
@@ -64,7 +67,9 @@ class Phil:
             model = self._import_model(module, method)
             for param_vals in params:
                 compatible_params = {
-                    k: v for k, v in param_vals.items() if k in model.__init__.__code__.co_varnames
+                    k: v
+                    for k, v in param_vals.items()
+                    if k in model.__init__.__code__.co_varnames
                 }
                 estimator = model(**compatible_params)
                 imputers.append(self._build_pipeline(preprocessor, estimator, max_iter))
@@ -123,14 +128,18 @@ class Phil:
         self.closest_index = self._select_representative(self.magic_descriptors)
         X = self.representations[self.closest_index]
         self.pipeline = self.selected_imputers[self.closest_index]
-        imputed_columns = self._get_imputed_columns(transformer=self.pipeline["preprocessor"])
+        imputed_columns = self._get_imputed_columns(
+            transformer=self.pipeline["preprocessor"]
+        )
         return pd.DataFrame(X, columns=imputed_columns)
 
     def transform(self, df: pd.DataFrame, max_iter: int = 5) -> pd.DataFrame:
         if not hasattr(self, "pipeline"):
             raise RuntimeError("Pipeline not fitted. Call `fit` first.")
 
-        imputed_columns = self._get_imputed_columns(transformer=self.pipeline["preprocessor"])
+        imputed_columns = self._get_imputed_columns(
+            transformer=self.pipeline["preprocessor"]
+        )
         return pd.DataFrame(self.pipeline.transform(df), columns=imputed_columns)
 
     @staticmethod
@@ -141,7 +150,9 @@ class Phil:
     def _select_representative(descriptors: List[np.ndarray]) -> int:
         stacked = np.stack(descriptors)
         avg_descriptor = stacked.mean(axis=0)
-        norms = np.linalg.norm((stacked - avg_descriptor).reshape(len(descriptors), -1), axis=1)
+        norms = np.linalg.norm(
+            (stacked - avg_descriptor).reshape(len(descriptors), -1), axis=1
+        )
         return int(np.argmin(norms))
 
     @staticmethod
@@ -192,7 +203,9 @@ class Phil:
 
         for key, preprocessing_config in strategy.items():
             try:
-                model = Phil._import_model(preprocessing_config.module, preprocessing_config.method)
+                model = Phil._import_model(
+                    preprocessing_config.module, preprocessing_config.method
+                )
             except (ImportError, AttributeError) as e:
                 raise RuntimeError(
                     f"Failed to import model {preprocessing_config.method} from module {preprocessing_config.module}: {e}"

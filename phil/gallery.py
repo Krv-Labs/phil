@@ -1,6 +1,6 @@
 """Collection of predefined configurations for Phil."""
 
-from typing import Any, Dict
+from typing import Dict
 
 import numpy as np
 from pydantic import BaseModel
@@ -129,7 +129,9 @@ class ProcessingGallery:
     def get(cls, name: str = "default") -> Dict[str, PreprocessingConfig]:
         return {
             "num": cls._numeric_methods.get(name, cls._numeric_methods["default"]),
-            "cat": cls._categorical_methods.get(name, cls._categorical_methods["default"]),
+            "cat": cls._categorical_methods.get(
+                name, cls._categorical_methods["default"]
+            ),
         }
 
 

@@ -196,16 +196,16 @@ class TestECT:
         # Assert
         # Check that results are different when normalization is applied
         for norm, unnorm in zip(result_normalized, result_unnormalized):
-            assert not np.allclose(
-                norm, unnorm
-            ), "Normalized and unnormalized outputs should be different"
+            assert not np.allclose(norm, unnorm), (
+                "Normalized and unnormalized outputs should be different"
+            )
 
             # Normalized values should be between 0 and 1
-            assert np.all(norm >= 0) and np.all(
-                norm <= 1
-            ), "Normalized values should be between 0 and 1"
+            assert np.all(norm >= 0) and np.all(norm <= 1), (
+                "Normalized values should be between 0 and 1"
+            )
 
             # Check shapes are the same
-            assert (
-                norm.shape == unnorm.shape
-            ), "Output shapes should be the same regardless of normalization"
+            assert norm.shape == unnorm.shape, (
+                "Output shapes should be the same regardless of normalization"
+            )
