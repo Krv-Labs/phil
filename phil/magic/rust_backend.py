@@ -9,7 +9,7 @@ import numpy as np
 
 def _load_backend():
     try:
-        return importlib.import_module("trailed")
+        return importlib.import_module("trailed.tabular")
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError("No ECT backend found. Install `trailed`.") from exc
 
