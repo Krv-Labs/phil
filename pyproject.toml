@@ -1,6 +1,6 @@
 [project]
-name = "phil"
-version = "0.1.5"
+name = "philler"
+version = "1.0.0"
 authors = [
     {name = "Krv Labs", email = "team@krv.ai"}
 ]
