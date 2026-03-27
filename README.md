@@ -105,3 +105,8 @@ uv sync --all-extras
 uv run pytest -v
 uv run black phil/ tests/
 ```
+
+## Documentation
+
+Project documentation lives under `docs/source` with unified API and guide pages.
+Build locally with `uv run sphinx-build -M html docs/source docs/build`.
