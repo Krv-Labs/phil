@@ -2,19 +2,8 @@
 
 from __future__ import annotations
 
-import importlib
-
 import numpy as np
-
-
-def _load_backend():
-    try:
-        return importlib.import_module("trailed.tabular")
-    except ModuleNotFoundError as exc:
-        raise ModuleNotFoundError("No ECT backend found. Install `trailed`.") from exc
-
-
-_BACKEND = _load_backend()
+from trailed.tabular import compute_ect_from_numpy
 
 
 def compute_ect_descriptor(
@@ -30,7 +19,7 @@ def compute_ect_descriptor(
     Returns an array shaped [num_thetas, resolution].
     """
     points = np.asarray(points, dtype=np.float32)
-    ect = _BACKEND.compute_ect_from_numpy(
+    ect = compute_ect_from_numpy(
         points=points,
         num_thetas=num_thetas,
         resolution=resolution,
