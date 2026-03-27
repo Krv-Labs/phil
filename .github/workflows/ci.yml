@@ -30,9 +30,13 @@ jobs:
         run: |
           uv sync --all-extras
 
-      - name: Check code formatting with Black
+      - name: Lint with Ruff
         run: |
-          uv run black --check --diff benson/ tests/
+          uv run ruff check phil/
+
+      - name: Check code formatting with Ruff
+        run: |
+          uv run ruff format --check phil/
 
   test:
     runs-on: ubuntu-latest
