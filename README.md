@@ -57,14 +57,14 @@ pipe.fit(X_train, y_train)
 
 `Phil` ships with named grids accessible via `GridGallery`:
 
-| Name | Methods |
-|------|---------|
-| `default` | BayesianRidge, DecisionTree, RandomForest, GradientBoosting |
-| `sampling` | DistributionImputer (empirical sampling) |
-| `finance` | IterativeImputer, KNNImputer, SimpleImputer |
-| `healthcare` | KNNImputer, SimpleImputer, IterativeImputer |
-| `marketing` | SimpleImputer, KNNImputer, IterativeImputer |
-| `engineering` | SimpleImputer, KNNImputer, IterativeImputer |
+| Name          | Methods                                                     |
+| ------------- | ----------------------------------------------------------- |
+| `default`     | BayesianRidge, DecisionTree, RandomForest, GradientBoosting |
+| `sampling`    | DistributionImputer (empirical sampling)                    |
+| `finance`     | IterativeImputer, KNNImputer, SimpleImputer                 |
+| `healthcare`  | KNNImputer, SimpleImputer, IterativeImputer                 |
+| `marketing`   | SimpleImputer, KNNImputer, IterativeImputer                 |
+| `engineering` | SimpleImputer, KNNImputer, IterativeImputer                 |
 
 Pass a grid name or an `ImputationConfig` directly:
 
