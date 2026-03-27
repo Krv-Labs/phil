@@ -1,10 +1,10 @@
 [project]
-name = "benson"
+name = "phil"
 version = "0.1.5"
 authors = [
     {name = "Krv Labs", email = "team@krv.ai"}
 ]
-description = "A multiverse data cleaning tool for agent pickup."
+description = "Phil: representation-guided multiverse imputation with Rust-backed ECT."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -13,7 +13,7 @@ dependencies = [
     "pydantic>=2.10.6",
     "scikit-learn>=1.6.1",
     "scipy>=1.15.2",
-    "torch>=2.6.0",
+    "trailed>=0.1.0",
 ]
 
 [build-system]
@@ -21,17 +21,23 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages]
-find = {include = ["benson", "benson.*"]}
+find = {include = ["phil", "phil.*"]}
 
 [tool.uv.sources]
 dect = { git = "https://github.com/aidos-lab/dect.git" }
+trailed = { index = "krv-research" }
+
+[[tool.uv.index]]
+name = "krv-research"
+url = "https://api.pyx.dev/simple/krv/research"
+explicit = true
 
 [dependency-groups]
 dev = [
-    "black>=25.9.0",
     "ipykernel>=6.29.5",
     "pdoc>=15.0.1",
     "pytest>=8.3.5",
     "pytest-cov>=6.1.1",
     "pytest-mock>=3.14.0",
+    "ruff>=0.15.8",
 ]
