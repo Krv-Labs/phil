@@ -18,8 +18,8 @@ jobs:
           python-version: "3.13"
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Install docs dependencies
-        run: uv sync --no-install-project --group docs
+      - name: Install dependencies
+        run: uv pip install sphinx furo sphinx-design sphinxcontrib-mermaid IPython nbsphinx
       - name: Build docs
         run: uv run --no-sync sphinx-build -M html docs/source docs/build
       - uses: actions/upload-pages-artifact@v3
