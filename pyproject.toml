@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.10.6",
     "scikit-learn>=1.6.1",
     "scipy>=1.15.2",
+    "trailed>=0.1.0",
 ]
 
 [build-system]
