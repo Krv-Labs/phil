@@ -1,5 +1,5 @@
 import pytest
-from benson.magic.base import Magic
+from phil.magic.base import Magic
 
 
 class TestMagic:
@@ -7,7 +7,6 @@ class TestMagic:
     # Subclass implements configure method correctly
     def test_subclass_implements_configure_correctly(self):
         import numpy as np
-        from abc import ABC, abstractmethod
         from pydantic import BaseModel
 
         class TestConfig(BaseModel):
@@ -37,9 +36,6 @@ class TestMagic:
 
     # Instantiating the abstract base class directly raises TypeError
     def test_instantiating_abstract_base_class_raises_error(self):
-        import numpy as np
-        import pytest
-        from abc import ABC, abstractmethod
         from pydantic import BaseModel
 
         class TestConfig(BaseModel):
@@ -57,7 +53,6 @@ class TestMagic:
     # Subclass implements generate method correctly
     def test_subclass_implements_generate_correctly(self):
         import numpy as np
-        from abc import ABC, abstractmethod
         from pydantic import BaseModel
 
         class TestConfig(BaseModel):
@@ -86,7 +81,6 @@ class TestMagic:
 
     def test_generate_returns_correct_shape(self):
         import numpy as np
-        from abc import ABC, abstractmethod
         from pydantic import BaseModel
 
         class TestConfig(BaseModel):
@@ -115,7 +109,6 @@ class TestMagic:
 
     def test_generate_with_empty_array(self):
         import numpy as np
-        from abc import ABC, abstractmethod
         from pydantic import BaseModel
 
         class TestConfig(BaseModel):

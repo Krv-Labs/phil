@@ -1,9 +1,9 @@
 """Tests for Phil's configuration functionality."""
 
 import pytest
-from benson.phil import Phil
-from benson import ImputationConfig
-from benson.gallery import GridGallery
+from phil.phil import Phil
+from phil import ImputationConfig
+from phil.gallery import GridGallery
 from pydantic import BaseModel
 from sklearn.model_selection import ParameterGrid
 

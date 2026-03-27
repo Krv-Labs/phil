@@ -1,14 +1,13 @@
 import pytest
 import numpy as np
-import torch
-from benson.magic.ect import ECT
-from benson.magic.config import ECTConfig
+from phil.magic.ect import ECT
+from phil.magic.config import ECTConfig
 
 
 class TestECT:
     def test_init_with_valid_config(self, mocker):
         # Arrange
-        mock_configure = mocker.patch("benson.magic.ect.ECT.configure")
+        mock_configure = mocker.patch("phil.magic.ect.ECT.configure")
         config = ECTConfig(
             num_thetas=10,
             radius=1.0,
@@ -46,9 +45,6 @@ class TestECT:
 
         # Create instance with mocked config
         ect_instance = ECT(config=mock_config)
-
-        # Mock _check_device to return 'cpu'
-        mocker.patch.object(ect_instance, "_check_device", return_value="cpu")
 
         # Act
         ect_instance.configure(num_thetas=200, seed=123)
@@ -166,31 +162,6 @@ class TestECT:
         # Act & Assert
         with pytest.raises(ValueError, match="Input must be a list of numpy arrays"):
             ect.generate(X)
-
-    def test_convert_to_tensor(self):
-        """Test converting numpy arrays to PyTorch tensor."""
-        config = ECTConfig(
-            num_thetas=8,
-            radius=1.0,
-            resolution=10,
-            scale=1,
-            seed=42,
-        )
-        ect = ECT(config)
-
-        # Test with 2D point clouds
-        X_batch_2d = [np.random.rand(10, 2) for _ in range(3)]
-        tensor_2d = ect._convert_to_tensor(X_batch_2d)
-        assert isinstance(tensor_2d, torch.Tensor)
-        assert tensor_2d.shape == (3, 10, 2)
-        assert tensor_2d.dtype == torch.float32
-
-        # Test with 3D point clouds
-        X_batch_3d = [np.random.rand(5, 3) for _ in range(2)]
-        tensor_3d = ect._convert_to_tensor(X_batch_3d)
-        assert isinstance(tensor_3d, torch.Tensor)
-        assert tensor_3d.shape == (2, 5, 3)
-        assert tensor_3d.dtype == torch.float32
 
     def test_normalization(self):
         """Test that normalization parameter affects the output."""

@@ -3,7 +3,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from benson.phil import Phil
+from phil.phil import Phil
 
 
 class TestPhilFitBehavior:

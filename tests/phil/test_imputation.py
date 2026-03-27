@@ -3,8 +3,8 @@
 import pytest
 import pandas as pd
 import numpy as np
-from benson.phil import Phil
-from benson import ImputationConfig
+from phil.phil import Phil
+from phil import ImputationConfig
 from sklearn.model_selection import ParameterGrid
 
 
@@ -141,7 +141,7 @@ class TestPhilImputationBehavior:
         # Configure Phil to use DistributionPreserver
         distribution_params = ImputationConfig(
             methods=["DistributionImputer"],
-            modules=["benson.imputation"],
+            modules=["phil.imputation"],
             grids=[ParameterGrid({"random_state": [42]})],
         )
 

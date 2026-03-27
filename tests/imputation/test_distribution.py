@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from benson.imputation import DistributionImputer
+from phil.imputation import DistributionImputer
 
 
 class TestDistributionImputer:

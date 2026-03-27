@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from benson.magic import ECTConfig
+from phil.magic import ECTConfig
 
 
 @pytest.fixture
@@ -24,6 +24,5 @@ def mock_ECTConfig():
         radius=1,
         resolution=100,
         scale=1,
-        ect_fn="scaled_sigmoid",
         seed=0,
     )
