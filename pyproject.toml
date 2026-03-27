@@ -28,7 +28,6 @@ trailed = { index = "krv-research" }
 [[tool.uv.index]]
 name = "krv-research"
 url = "https://api.pyx.dev/simple/krv/research"
-explicit = true
 
 [dependency-groups]
 dev = [
