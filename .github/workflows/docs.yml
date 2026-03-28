@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --group docs --no-sources
       - name: Build docs
-        run: uv run sphinx-build -M html docs/source docs/build
+        run: uv run --no-sync sphinx-build -M html docs/source docs/build
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/build/html
