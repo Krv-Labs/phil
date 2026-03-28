@@ -1,8 +1,7 @@
 """Tests for Phil's descriptor generation functionality."""
 
-import pytest
 import numpy as np
-from benson.phil import Phil
+from phil.phil import Phil
 
 
 class TestPhilDescriptorBehavior:

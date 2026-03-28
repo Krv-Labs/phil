@@ -2,7 +2,7 @@
 
 import pytest
 import pandas as pd
-from benson.phil import Phil
+from phil.phil import Phil
 
 
 class TestPhilColumnBehavior:

@@ -1,13 +1,11 @@
 import pytest
-from benson.magic.base import Magic
+from phil.magic.base import Magic
 
 
 class TestMagic:
-
     # Subclass implements configure method correctly
     def test_subclass_implements_configure_correctly(self):
         import numpy as np
-        from abc import ABC, abstractmethod
         from pydantic import BaseModel
 
         class TestConfig(BaseModel):
@@ -31,15 +29,12 @@ class TestMagic:
 
         # Verify the configuration was applied correctly
         assert hasattr(magic, "config"), "Configure method should store parameters"
-        assert (
-            magic.config == test_params
-        ), "Configure method should store the provided parameters"
+        assert magic.config == test_params, (
+            "Configure method should store the provided parameters"
+        )
 
     # Instantiating the abstract base class directly raises TypeError
     def test_instantiating_abstract_base_class_raises_error(self):
-        import numpy as np
-        import pytest
-        from abc import ABC, abstractmethod
         from pydantic import BaseModel
 
         class TestConfig(BaseModel):
@@ -47,17 +42,16 @@ class TestMagic:
 
         # Attempting to instantiate the abstract base class should raise TypeError
         with pytest.raises(TypeError) as excinfo:
-            magic = Magic(config=TestConfig())
+            Magic(config=TestConfig())
 
         # Verify the error message indicates it's due to abstract methods
-        assert (
-            "abstract" in str(excinfo.value).lower()
-        ), "Error should mention abstract methods"
+        assert "abstract" in str(excinfo.value).lower(), (
+            "Error should mention abstract methods"
+        )
 
     # Subclass implements generate method correctly
     def test_subclass_implements_generate_correctly(self):
         import numpy as np
-        from abc import ABC, abstractmethod
         from pydantic import BaseModel
 
         class TestConfig(BaseModel):
@@ -80,13 +74,12 @@ class TestMagic:
         result = magic.generate(X)
 
         # Verify the transformation was applied
-        assert np.array_equal(
-            result, X * 2
-        ), "Generate method should multiply input by 2"
+        assert np.array_equal(result, X * 2), (
+            "Generate method should multiply input by 2"
+        )
 
     def test_generate_returns_correct_shape(self):
         import numpy as np
-        from abc import ABC, abstractmethod
         from pydantic import BaseModel
 
         class TestConfig(BaseModel):
@@ -109,13 +102,12 @@ class TestMagic:
         for shape in shapes:
             X = np.random.rand(*shape)
             result = magic.generate(X)
-            assert (
-                result.shape == X.shape
-            ), f"Output shape {result.shape} doesn't match input shape {X.shape}"
+            assert result.shape == X.shape, (
+                f"Output shape {result.shape} doesn't match input shape {X.shape}"
+            )
 
     def test_generate_with_empty_array(self):
         import numpy as np
-        from abc import ABC, abstractmethod
         from pydantic import BaseModel
 
         class TestConfig(BaseModel):
@@ -135,7 +127,7 @@ class TestMagic:
         # Test with empty array
         X = np.array([])
         result = magic.generate(X)
-        assert isinstance(
-            result, np.ndarray
-        ), "Should return numpy array even for empty input"
+        assert isinstance(result, np.ndarray), (
+            "Should return numpy array even for empty input"
+        )
         assert len(result) == 0, "Should preserve empty array length"

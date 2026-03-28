@@ -26,19 +26,19 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Install dependencies
+      - name: Lint with Ruff
         run: |
-          uv sync --all-extras
+          uvx ruff check phil/
 
-      - name: Check code formatting with Black
+      - name: Check code formatting with Ruff
         run: |
-          uv run black --check --diff benson/ tests/
+          uvx ruff format --check phil/
 
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     name: Test Python ${{ matrix.python-version }}
     needs: quality-checks
@@ -58,11 +58,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --all-extras
+          uv sync --group dev --no-sources
 
       - name: Run tests
         run: |
-          uv run pytest -v
+          uv run --no-sync pytest -v
 
       - name: Test summary
         run: |

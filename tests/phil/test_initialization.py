@@ -1,8 +1,8 @@
 """Tests for Phil's initialization functionality."""
 
 import pytest
-from benson.phil import Phil
-from benson.magic import Magic, ECT, ECTConfig
+from phil.phil import Phil
+from phil.magic import Magic, ECT, ECTConfig
 
 
 class TestPhilInitializationBehavior:
@@ -57,7 +57,6 @@ class TestPhilInitializationBehavior:
             radius=1.0,
             resolution=64,
             scale=500,
-            ect_fn="scaled_sigmoid",
             seed=42,
         )
         mock_magic = ECT(config=mock_config)

@@ -2,7 +2,11 @@
 notebooks
 .python-version
 .DS_Store
-docs/
+docs/build/
+
+#Python env
+uv.lock
+.python-version
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

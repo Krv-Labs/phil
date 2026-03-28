@@ -1,8 +1,5 @@
 """
-Benson imputation module.
-
-This module provides various imputation strategies for handling missing data,
-with a focus on preserving the statistical properties of the original data.
+Phil imputation module.
 """
 
 from .config import ImputationConfig, PreprocessingConfig

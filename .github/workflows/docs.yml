@@ -1,50 +1,33 @@
-name: pages
-
-# build the documentation whenever there are new commits on main
+name: Docs
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
-# security: restrict permissions for CI jobs.
 permissions:
   contents: read
 
 jobs:
-  # Build the documentation and upload the static HTML files as an artifact.
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
-
+          python-version: "3.12"
       - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Install dependencies
-        run: |
-          uv sync --all-extras
-
-      - name: Build documentation
-        run: |
-          uv run pdoc -d numpy benson benson.imputation benson.magic --logo https://avatars.githubusercontent.com/u/137914328\?s\=400\&u\=5729f198e370a8b752fdff84464c7ca607d77324\&v\=4 -o docs/api
-
+        run: uv sync --group docs --no-sources
+      - name: Build docs
+        run: uv run --no-sync sphinx-build -M html docs/source docs/build
       - uses: actions/upload-pages-artifact@v3
-        if: github.event_name == 'push'
         with:
-          path: docs/api
+          path: docs/build/html
 
-  # Deploy the artifact to GitHub pages.
-  # This is a separate job so that only actions/deploy-pages has the necessary permissions.
   deploy:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:
