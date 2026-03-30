@@ -4,7 +4,7 @@ version = "1.0.0"
 authors = [
     {name = "Krv Labs", email = "team@krv.ai"}
 ]
-description = "Phil: representation-guided multiverse imputation with Rust-backed ECT."
+description = "Phil: multiverse imputation powered by topology-based representation learning."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
