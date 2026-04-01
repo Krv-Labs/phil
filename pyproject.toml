@@ -1,6 +1,6 @@
 [project]
 name = "philler"
-version = "1.0.0"
+version = "1.0.1"
 authors = [
     {name = "Krv Labs", email = "team@krv.ai"}
 ]
@@ -12,7 +12,7 @@ dependencies = [
     "pydantic>=2.10.6",
     "scikit-learn>=1.6.1",
     "scipy>=1.15.2",
-    "trailed>=0.1.0",
+    "trailed>=0.1.1",
 ]
 
 [build-system]
@@ -22,13 +22,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages]
 find = {include = ["phil", "phil.*"]}
 
-[tool.uv.sources]
-trailed = { index = "krv-research" }
-
-[[tool.uv.index]]
-name = "krv-research"
-url = "https://api.pyx.dev/simple/krv/research"
-explicit = true
 
 [dependency-groups]
 dev = [

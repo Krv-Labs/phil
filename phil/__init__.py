@@ -2,6 +2,8 @@
 Phil package.
 """
 
+from sklearn.experimental import enable_iterative_imputer  # noqa: F401
+
 from phil.gallery import GridGallery
 from phil.imputation import DistributionImputer, ImputationConfig, PreprocessingConfig
 from phil.magic import ECT, ECTConfig
