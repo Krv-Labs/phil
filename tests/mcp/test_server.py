@@ -2,6 +2,9 @@
 
 The Phil pipeline is patched to skip the ``trailed`` ECT backend so these
 tests run on any developer machine.
+
+Skipped automatically when the optional ``mcp`` dependency group
+(``fastmcp``) is not installed.
 """
 
 from __future__ import annotations
@@ -13,9 +16,18 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
-from fastmcp import Client
 
-from phil.mcp.server import mcp
+pytest.importorskip(
+    "fastmcp",
+    reason=(
+        "phil MCP tests require the 'mcp' optional dependency group "
+        "(`uv sync --group mcp` or `pip install philler[mcp]`)."
+    ),
+)
+
+from fastmcp import Client  # noqa: E402
+
+from phil.mcp.server import mcp  # noqa: E402
 
 
 def _payload(call_result) -> dict[str, Any]:

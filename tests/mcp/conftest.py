@@ -1,10 +1,25 @@
-"""Fixtures for Phil MCP tests."""
+"""Fixtures for Phil MCP tests.
+
+Skips the entire MCP test subtree when the optional ``mcp`` dependency
+group (``fastmcp`` / ``pyyaml`` / ``pyarrow``) is not installed locally.
+CI installs it via ``uv sync --group mcp``.
+"""
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 import pytest
+
+pytest.importorskip(
+    "fastmcp",
+    reason=(
+        "phil MCP tests require the 'mcp' optional dependency group "
+        "(`uv sync --group mcp` or `pip install philler[mcp]`)."
+    ),
+)
+pytest.importorskip("yaml", reason="pyyaml required for MCP tests")
+pytest.importorskip("pyarrow", reason="pyarrow required for MCP Parquet tests")
 
 
 @pytest.fixture

@@ -58,7 +58,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --group dev --no-sources
+          uv sync --group dev --group mcp --no-sources
 
       - name: Run tests
         run: |
