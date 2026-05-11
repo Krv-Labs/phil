@@ -15,6 +15,16 @@ dependencies = [
     "trailed>=0.1.1",
 ]
 
+[project.optional-dependencies]
+mcp = [
+    "fastmcp>=2.0",
+    "pyyaml>=6.0",
+    "pyarrow>=15.0",
+]
+
+[project.scripts]
+phil-mcp = "phil.mcp.server:main"
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
@@ -28,9 +38,15 @@ dev = [
     "ipykernel>=6.29.5",
     "pdoc>=15.0.1",
     "pytest>=8.3.5",
+    "pytest-asyncio>=0.23",
     "pytest-cov>=6.1.1",
     "pytest-mock>=3.14.0",
     "ruff>=0.15.8",
+]
+mcp = [
+    "fastmcp>=2.0",
+    "pyyaml>=6.0",
+    "pyarrow>=15.0",
 ]
 docs = [
     "sphinx>=7.4,<9",
