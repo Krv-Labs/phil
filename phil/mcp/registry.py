@@ -132,9 +132,7 @@ class MCPRegistry:
             self._write_json(self._upload_meta_path(upload_id), asdict(record))
         return record
 
-    def append_upload_chunk(
-        self, upload_id: str, chunk: bytes
-    ) -> UploadRecord | None:
+    def append_upload_chunk(self, upload_id: str, chunk: bytes) -> UploadRecord | None:
         with self._locked_registry():
             record = self.get_upload(upload_id)
             if record is None:

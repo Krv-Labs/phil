@@ -308,11 +308,7 @@ def _descriptor_stats(descriptors: list[np.ndarray]) -> dict[str, Any]:
     for i in range(n):
         for j in range(i + 1, n):
             pairwise_means.append(
-                float(
-                    np.linalg.norm(
-                        (descriptors[i] - descriptors[j]).reshape(-1)
-                    )
-                )
+                float(np.linalg.norm((descriptors[i] - descriptors[j]).reshape(-1)))
             )
     return {
         "n_candidates": n,
@@ -487,9 +483,7 @@ async def append_dataset_chunk(
             )
         record = registry.append_upload_chunk(upload_id, chunk_bytes)
         if record is None:
-            return unknown_handle_error(
-                "append_dataset_chunk", "upload_id", upload_id
-            )
+            return unknown_handle_error("append_dataset_chunk", "upload_id", upload_id)
         return json.dumps(dataclasses.asdict(record), indent=2)
     except Exception as e:
         return mcp_error("append_dataset_chunk", str(e))
@@ -545,7 +539,9 @@ async def characterize_dataset(
                     "dtype": str(series.dtype),
                     "n_unique": int(series.nunique(dropna=True)),
                     "n_missing": n_missing,
-                    "missing_pct": round(n_missing / n_rows * 100, 3) if n_rows else 0.0,
+                    "missing_pct": round(n_missing / n_rows * 100, 3)
+                    if n_rows
+                    else 0.0,
                 }
             )
         total_missing = int(df.isna().sum().sum())
@@ -612,12 +608,8 @@ async def probe_columns(
                 "dtype": str(series.dtype),
                 "n_unique": int(series.nunique(dropna=True)),
                 "n_missing": int(series.isna().sum()),
-                "sample_values": [
-                    _coerce_jsonable(v) for v in sample_values
-                ],
-                "top_values": {
-                    str(k): int(v) for k, v in top_values.items()
-                },
+                "sample_values": [_coerce_jsonable(v) for v in sample_values],
+                "top_values": {str(k): int(v) for k, v in top_values.items()},
             }
             if pd.api.types.is_numeric_dtype(series):
                 profile["min"] = _coerce_jsonable(
@@ -822,9 +814,7 @@ async def get_active_config(ctx: Context = None) -> str:
 
 
 @mcp.tool()
-async def refine_active_config(
-    overrides: dict[str, Any], ctx: Context = None
-) -> str:
+async def refine_active_config(overrides: dict[str, Any], ctx: Context = None) -> str:
     """Apply dotted-path overrides to the session's active config."""
     session = _get_session(ctx)
     if not session.active_config_yaml:
@@ -1084,18 +1074,14 @@ async def run_imputation_sweep(
         }
         return json.dumps(payload, indent=2)
     except LookupError:
-        return unknown_handle_error(
-            "run_imputation_sweep", "dataset_id", dataset_id
-        )
+        return unknown_handle_error("run_imputation_sweep", "dataset_id", dataset_id)
     except FileNotFoundError as e:
         return path_access_error("run_imputation_sweep", str(e))
     except Exception as e:
         return mcp_error("run_imputation_sweep", str(e))
 
 
-def _render_sweep_diff(
-    previous: SweepRecord | None, current: SweepRecord
-) -> str:
+def _render_sweep_diff(previous: SweepRecord | None, current: SweepRecord) -> str:
     if previous is None:
         return (
             "| Field | Value |\n|---|---|\n"
@@ -1105,15 +1091,11 @@ def _render_sweep_diff(
             f"| mean_pairwise_l2 | {current.descriptor_stats.get('mean_pairwise_l2', 0):.4f} |\n"
         )
     rows = ["| Field | Previous | Current |", "|---|---|---|"]
-    rows.append(
-        f"| run_id | {previous.run_id} | {current.run_id} |"
-    )
+    rows.append(f"| run_id | {previous.run_id} | {current.run_id} |")
     rows.append(
         f"| selected_index | {previous.selected_index} | {current.selected_index} |"
     )
-    rows.append(
-        f"| n_candidates | {previous.n_candidates} | {current.n_candidates} |"
-    )
+    rows.append(f"| n_candidates | {previous.n_candidates} | {current.n_candidates} |")
     rows.append(
         "| mean_pairwise_l2 | "
         f"{previous.descriptor_stats.get('mean_pairwise_l2', 0):.4f} | "

@@ -86,9 +86,7 @@ async def test_end_to_end_csv_sweep(
         assert dataset_id.startswith("ds_")
 
         char = _payload(
-            await client.call_tool(
-                "characterize_dataset", {"dataset_id": dataset_id}
-            )
+            await client.call_tool("characterize_dataset", {"dataset_id": dataset_id})
         )
         assert char["status"] == "ok"
         assert char["n_rows"] == 10
@@ -128,9 +126,7 @@ async def test_end_to_end_csv_sweep(
         )
         assert summary["run_id"] == run_id
 
-        diag = _payload(
-            await client.call_tool("diagnose_sweep", {"run_id": run_id})
-        )
+        diag = _payload(await client.call_tool("diagnose_sweep", {"run_id": run_id}))
         assert diag["descriptor_stats"]["n_candidates"] == 3
 
         ranked = _payload(
@@ -178,9 +174,7 @@ async def test_run_rejects_no_missing(tmp_path: Path, patched_phil) -> None:
 
 
 @pytest.mark.asyncio
-async def test_parquet_path_ingested_natively(
-    parquet_path: str, patched_phil
-) -> None:
+async def test_parquet_path_ingested_natively(parquet_path: str, patched_phil) -> None:
     async with Client(mcp) as client:
         ingest = _payload(
             await client.call_tool("ingest_dataset", {"path": parquet_path})
@@ -209,9 +203,7 @@ async def test_workflow_guide_and_runtime_context() -> None:
 @pytest.mark.asyncio
 async def test_refine_active_config_round_trip(csv_path: str) -> None:
     async with Client(mcp) as client:
-        ingest = _payload(
-            await client.call_tool("ingest_dataset", {"path": csv_path})
-        )
+        ingest = _payload(await client.call_tool("ingest_dataset", {"path": csv_path}))
         await client.call_tool(
             "create_config",
             {"dataset_id": ingest["dataset_id"], "samples": 3},

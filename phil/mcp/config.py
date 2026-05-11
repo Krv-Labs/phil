@@ -87,7 +87,9 @@ def parse_yaml_mapping(config_yaml: str) -> dict[str, Any]:
     return parsed
 
 
-def default_config_dict(*, run_name: str = "phil_sweep", data: str = "") -> dict[str, Any]:
+def default_config_dict(
+    *, run_name: str = "phil_sweep", data: str = ""
+) -> dict[str, Any]:
     """Return the canonical default config dict for Phil sweeps."""
     return {
         "run": {"name": run_name, "data": data},
@@ -128,9 +130,7 @@ def validate_config_yaml(
     try:
         raw = parse_yaml_mapping(config_yaml)
     except ValueError as exc:
-        error_code = (
-            "YAML_NOT_RAW" if "raw YAML" in str(exc) else "CONFIG_YAML_INVALID"
-        )
+        error_code = "YAML_NOT_RAW" if "raw YAML" in str(exc) else "CONFIG_YAML_INVALID"
         return ValidationReport(
             ok=False,
             normalized_yaml=None,
@@ -189,9 +189,7 @@ def _validate_run(section: Any, issues: list[ValidationIssue]) -> None:
     if section is None:
         return
     if not isinstance(section, dict):
-        issues.append(
-            ValidationIssue(path="$.run", message="'run' must be a mapping.")
-        )
+        issues.append(ValidationIssue(path="$.run", message="'run' must be a mapping."))
         return
     unknown = sorted(set(section.keys()) - _ALLOWED_RUN)
     for key in unknown:
@@ -478,7 +476,9 @@ def config_to_phil_kwargs(config_yaml: str) -> dict[str, Any]:
         param_grid: Any = ImputationConfig(
             methods=list(custom["methods"]),
             modules=list(custom["modules"]),
-            grids=[ParameterGrid(g) if isinstance(g, dict) else g for g in custom["grids"]],
+            grids=[
+                ParameterGrid(g) if isinstance(g, dict) else g for g in custom["grids"]
+            ],
         )
     else:
         param_grid = grid_name
