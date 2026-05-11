@@ -33,6 +33,10 @@ build-backend = "setuptools.build_meta"
 find = {include = ["phil", "phil.*"]}
 
 
+[project.optional-dependencies]
+viz = ["matplotlib>=3.7"]
+examples = ["matplotlib>=3.7", "ucimlrepo>=0.0.7", "jupyter>=1.0"]
+
 [dependency-groups]
 dev = [
     "ipykernel>=6.29.5",

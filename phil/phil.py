@@ -193,6 +193,18 @@ class Phil:
             )
         raise ValueError("Invalid parameter grid type.")
 
+    def plot_mds(self, **kwargs):
+        """Visualize the ECT descriptor space via MDS after ``fit()``.
+
+        Delegates to :func:`phil.visualization.plot_mds`.  Returns
+        ``(fig, embedding)`` where ``embedding`` has shape ``(n, 2)``.
+        """
+        from phil.visualization import plot_mds as _plot_mds
+
+        if not self.magic_descriptors:
+            raise RuntimeError("Call fit() before plot_mds().")
+        return _plot_mds(self.magic_descriptors, self.closest_index, **kwargs)
+
     @staticmethod
     def _configure_preprocessor(
         strategy: str,
