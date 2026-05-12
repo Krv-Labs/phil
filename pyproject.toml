@@ -21,6 +21,8 @@ mcp = [
     "pyyaml>=6.0",
     "pyarrow>=15.0",
 ]
+viz = ["matplotlib>=3.7"]
+examples = ["matplotlib>=3.7", "ucimlrepo>=0.0.7", "jupyter>=1.0"]
 
 [project.scripts]
 phil-mcp = "phil.mcp.server:main"
@@ -31,11 +33,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages]
 find = {include = ["phil", "phil.*"]}
-
-
-[project.optional-dependencies]
-viz = ["matplotlib>=3.7"]
-examples = ["matplotlib>=3.7", "ucimlrepo>=0.0.7", "jupyter>=1.0"]
 
 [dependency-groups]
 dev = [
