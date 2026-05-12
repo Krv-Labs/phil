@@ -5,9 +5,6 @@ from phil.imputation.covariate_distribution import CovariateDistributionImputer
 
 
 class TestCovariateDistributionImputer:
-    def _make_rng(self):
-        return np.random.RandomState(42)
-
     def test_numeric_imputation(self):
         imputer = CovariateDistributionImputer(n_neighbors=2, random_state=42)
         X = np.array([[1.0], [2.0], [3.0], [4.0]])
