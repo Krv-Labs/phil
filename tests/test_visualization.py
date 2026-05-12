@@ -36,7 +36,7 @@ class TestPlotMds:
 
     def test_single_descriptor_raises(self):
         descriptors = self._make_descriptors(n=1)
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             plot_mds(descriptors, selected_index=0, random_state=0)
 
     def test_deterministic_with_random_state(self):
