@@ -41,12 +41,20 @@ def write_toy_dataset(output_dir: Path) -> Path:
 
 
 def prepare_pima(output_dir: Path, mask_rate: float, seed: int) -> list[Path]:
-    from ucimlrepo import fetch_ucirepo
+    from sklearn.datasets import fetch_openml
 
-    pima = fetch_ucirepo(id=34).data.features.copy()
-    zero_impossible_cols = ["Glucose", "BloodPressure", "SkinThickness", "Insulin", "BMI"]
+    pima = fetch_openml(name="diabetes", version=1, as_frame=True, parser="auto").data.copy()
+    
+    # In OpenML's 'diabetes' dataset, the columns are abbreviated
+    zero_impossible_cols = ["plas", "pres", "skin", "insu", "mass"]
     existing = [c for c in zero_impossible_cols if c in pima.columns]
+    
+    # Replace 0 with NaN for these columns, handling string conversions if necessary
     pima[existing] = pima[existing].replace(0, np.nan)
+    pima[existing] = pima[existing].replace("0", np.nan)
+    
+    # Ensure all columns are numeric
+    pima = pima.astype(float)
 
     complete = pima.dropna().reset_index(drop=True)
     masked = introduce_mcar(complete, rate=mask_rate, seed=seed)
