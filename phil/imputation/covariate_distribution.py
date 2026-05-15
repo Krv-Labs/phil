@@ -52,7 +52,9 @@ class CovariateDistributionImputer(BaseEstimator):
         if self.covariance_matrix is not None:
             cov = np.asarray(self.covariance_matrix)
             if cov.shape[0] != X.shape[1] or cov.shape[1] != X.shape[1]:
-                raise ValueError("covariance_matrix must be square with dimensions matching X.")
+                raise ValueError(
+                    "covariance_matrix must be square with dimensions matching X."
+                )
             self.VI_ = np.linalg.inv(cov)
         else:
             self.VI_ = None
@@ -94,15 +96,17 @@ class CovariateDistributionImputer(BaseEstimator):
             return np.full(n_samples, np.nan, dtype=float)
 
         k = min(self.n_neighbors, len(self.y_obs_))
-        
+
         if self.VI_ is not None:
-            dists = cdist(X, self.X_obs_, metric='mahalanobis', VI=self.VI_)
+            dists = cdist(X, self.X_obs_, metric="mahalanobis", VI=self.VI_)
         else:
             dists = euclidean_distances(X, self.X_obs_)
-            
+
         neighbor_idxs = np.argpartition(dists, k - 1, axis=1)[:, :k]
 
-        predictions = np.empty(n_samples, dtype=object if self.is_categorical_ else float)
+        predictions = np.empty(
+            n_samples, dtype=object if self.is_categorical_ else float
+        )
         for i, neighbors in enumerate(neighbor_idxs):
             pool = self.y_obs_[neighbors]
             predictions[i] = self.rng_.choice(pool)

@@ -266,37 +266,52 @@ def _validate_imputation(section: Any, issues: list[ValidationIssue]) -> None:
             issues.append(
                 ValidationIssue(
                     path="$.imputation.domain_knowledge",
-                    message="'domain_knowledge' must be a mapping."
+                    message="'domain_knowledge' must be a mapping.",
                 )
             )
         else:
             cov_subsets = domain_knowledge.get("covariate_subsets")
             if cov_subsets is not None:
                 if not isinstance(cov_subsets, dict):
-                    issues.append(ValidationIssue(path="$.imputation.domain_knowledge.covariate_subsets", message="Must be a mapping."))
+                    issues.append(
+                        ValidationIssue(
+                            path="$.imputation.domain_knowledge.covariate_subsets",
+                            message="Must be a mapping.",
+                        )
+                    )
                 else:
                     for target, mapping in cov_subsets.items():
                         if not isinstance(mapping, dict):
-                            issues.append(ValidationIssue(path=f"$.imputation.domain_knowledge.covariate_subsets.{target}", message="Must be a mapping."))
+                            issues.append(
+                                ValidationIssue(
+                                    path=f"$.imputation.domain_knowledge.covariate_subsets.{target}",
+                                    message="Must be a mapping.",
+                                )
+                            )
                             continue
                         if not mapping.get("citations"):
                             issues.append(
                                 ValidationIssue(
                                     path=f"$.imputation.domain_knowledge.covariate_subsets.{target}.citations",
                                     message="Citations are required when using covariate_subsets.",
-                                    suggestion="Provide a list of citations justifying the chosen predictors."
+                                    suggestion="Provide a list of citations justifying the chosen predictors.",
                                 )
                             )
             cov_matrix = domain_knowledge.get("covariance_matrix")
             if cov_matrix is not None:
                 if not isinstance(cov_matrix, dict):
-                    issues.append(ValidationIssue(path="$.imputation.domain_knowledge.covariance_matrix", message="Must be a mapping."))
+                    issues.append(
+                        ValidationIssue(
+                            path="$.imputation.domain_knowledge.covariance_matrix",
+                            message="Must be a mapping.",
+                        )
+                    )
                 elif not cov_matrix.get("citations"):
                     issues.append(
                         ValidationIssue(
                             path="$.imputation.domain_knowledge.covariance_matrix.citations",
                             message="Citations are required when using covariance_matrix.",
-                            suggestion="Provide a list of citations justifying the custom covariance matrix."
+                            suggestion="Provide a list of citations justifying the custom covariance matrix.",
                         )
                     )
 
@@ -406,9 +421,7 @@ def _validate_custom(custom: dict[str, Any], issues: list[ValidationIssue]) -> N
             and isinstance(custom.get("modules"), list)
             and isinstance(custom.get("grids"), list)
             and not (
-                len(custom["methods"])
-                == len(custom["modules"])
-                == len(custom["grids"])
+                len(custom["methods"]) == len(custom["modules"]) == len(custom["grids"])
             )
         ):
             issues.append(
@@ -417,6 +430,7 @@ def _validate_custom(custom: dict[str, Any], issues: list[ValidationIssue]) -> N
                     message="methods, modules, and grids lists must have the same length.",
                 )
             )
+
 
 def _validate_magic(section: Any, issues: list[ValidationIssue]) -> None:
     if section is None:

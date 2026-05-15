@@ -32,7 +32,9 @@ class ImputationConfig(BaseModel):
     methods: List[str] = Field(..., description="Names of imputation methods")
     modules: List[str] = Field(..., description="Python modules containing methods")
     grids: List[ParameterGrid] = Field(..., description="Parameter grids for methods")
-    domain_knowledge: Optional[DomainKnowledge] = Field(None, description="Domain knowledge for covariate imputation")
+    domain_knowledge: Optional[DomainKnowledge] = Field(
+        None, description="Domain knowledge for covariate imputation"
+    )
 
 
 class PreprocessingConfig(BaseModel):

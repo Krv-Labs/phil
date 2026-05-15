@@ -2,15 +2,16 @@ import warnings
 
 import numpy as np
 from sklearn.impute import IterativeImputer
-from sklearn.utils.validation import check_is_fitted
+
 
 class MaskedIterativeImputer(IterativeImputer):
     """
     Extension of IterativeImputer that respects a covariate_subsets mapping.
-    
+
     This class allows users to restrict which predictors are used to impute
     specific target variables based on domain knowledge.
     """
+
     def __init__(
         self,
         estimator=None,
@@ -60,9 +61,9 @@ class MaskedIterativeImputer(IterativeImputer):
             warnings.warn(
                 "covariate_subsets provided but feature_names is missing. "
                 "Masking will not be applied.",
-                UserWarning
+                UserWarning,
             )
-            
+
         if self.covariate_subsets and self.feature_names:
             self._subset_indices = {}
             for target_name, config in self.covariate_subsets.items():
@@ -77,7 +78,7 @@ class MaskedIterativeImputer(IterativeImputer):
                     self._subset_indices[target_idx] = set(predictor_indices)
         else:
             self._subset_indices = None
-            
+
         return super().fit(X, y)
 
     def _impute_one_feature(
@@ -92,13 +93,15 @@ class MaskedIterativeImputer(IterativeImputer):
         if self._subset_indices and feat_idx in self._subset_indices:
             allowed_neighbors = self._subset_indices[feat_idx]
             original_neighbors = set(neighbor_feat_idx)
-            restricted_neighbors = list(original_neighbors.intersection(allowed_neighbors))
-            
+            restricted_neighbors = list(
+                original_neighbors.intersection(allowed_neighbors)
+            )
+
             if not restricted_neighbors:
-                restricted_neighbors = neighbor_feat_idx 
+                restricted_neighbors = neighbor_feat_idx
             else:
                 restricted_neighbors = np.array(sorted(restricted_neighbors), dtype=int)
-            
+
             return super()._impute_one_feature(
                 X_filled,
                 mask_missing_values,
@@ -107,7 +110,7 @@ class MaskedIterativeImputer(IterativeImputer):
                 estimator=estimator,
                 fit_mode=fit_mode,
             )
-            
+
         return super()._impute_one_feature(
             X_filled,
             mask_missing_values,

@@ -31,8 +31,30 @@ def write_toy_dataset(output_dir: Path) -> Path:
             "resting_bp": [145, np.nan, 130, 120, 138, np.nan, 128, 118, 150, 132],
             "cholesterol": [233, 250, np.nan, 204, 236, 280, np.nan, 190, 300, 221],
             "sex": ["M", "F", "M", "F", "M", "M", "F", "F", None, "M"],
-            "pain_type": ["typical", "asymptomatic", None, "non-anginal", "typical", None, "atypical", "typical", "asymptomatic", "non-anginal"],
-            "risk_group": ["high", "high", "medium", "low", "high", "high", "low", "low", "high", None],
+            "pain_type": [
+                "typical",
+                "asymptomatic",
+                None,
+                "non-anginal",
+                "typical",
+                None,
+                "atypical",
+                "typical",
+                "asymptomatic",
+                "non-anginal",
+            ],
+            "risk_group": [
+                "high",
+                "high",
+                "medium",
+                "low",
+                "high",
+                "high",
+                "low",
+                "low",
+                "high",
+                None,
+            ],
         }
     )
     target = output_dir / "toy_medical_missing.csv"
@@ -43,16 +65,18 @@ def write_toy_dataset(output_dir: Path) -> Path:
 def prepare_pima(output_dir: Path, mask_rate: float, seed: int) -> list[Path]:
     from sklearn.datasets import fetch_openml
 
-    pima = fetch_openml(name="diabetes", version=1, as_frame=True, parser="auto").data.copy()
-    
+    pima = fetch_openml(
+        name="diabetes", version=1, as_frame=True, parser="auto"
+    ).data.copy()
+
     # In OpenML's 'diabetes' dataset, the columns are abbreviated
     zero_impossible_cols = ["plas", "pres", "skin", "insu", "mass"]
     existing = [c for c in zero_impossible_cols if c in pima.columns]
-    
+
     # Replace 0 with NaN for these columns, handling string conversions if necessary
     pima[existing] = pima[existing].replace(0, np.nan)
     pima[existing] = pima[existing].replace("0", np.nan)
-    
+
     # Ensure all columns are numeric
     pima = pima.astype(float)
 
@@ -70,7 +94,9 @@ def prepare_heart(output_dir: Path, mask_rate: float, seed: int) -> list[Path]:
     from ucimlrepo import fetch_ucirepo
 
     heart = fetch_ucirepo(id=45).data.features.copy()
-    complete_numeric = heart.dropna().select_dtypes(include="number").reset_index(drop=True)
+    complete_numeric = (
+        heart.dropna().select_dtypes(include="number").reset_index(drop=True)
+    )
     masked = introduce_mcar(complete_numeric, rate=mask_rate, seed=seed)
 
     out_complete = output_dir / "heart_complete_numeric.csv"
@@ -110,12 +136,16 @@ def main() -> None:
     generated: list[Path] = [write_toy_dataset(output_dir)]
 
     try:
-        generated.extend(prepare_pima(output_dir, mask_rate=args.mask_rate, seed=args.seed))
+        generated.extend(
+            prepare_pima(output_dir, mask_rate=args.mask_rate, seed=args.seed)
+        )
     except Exception as exc:
         print(f"[warn] Could not fetch/build PIMA dataset: {exc}")
 
     try:
-        generated.extend(prepare_heart(output_dir, mask_rate=args.mask_rate, seed=args.seed))
+        generated.extend(
+            prepare_heart(output_dir, mask_rate=args.mask_rate, seed=args.seed)
+        )
     except Exception as exc:
         print(f"[warn] Could not fetch/build Heart dataset: {exc}")
 

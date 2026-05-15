@@ -21,6 +21,7 @@ class GridGallery:
     - Marketing: Anand & Mamidi (2020) / Zhang et al. (2025) on ML for consumer analytics.
     - Engineering: Thomas & Rajabi (2021) and Idri et al. (2016) on systematic reviews of engineering data.
     """
+
     _grids = {
         "default": ImputationConfig(
             methods=[
@@ -155,9 +156,10 @@ class ProcessingGallery:
 
     Citations:
     - Finance: RobustScaler for handling outliers in financial time series and asset data.
-    - Marketing: TargetEncoder for high-cardinality features (e.g., zip codes, product IDs) 
+    - Marketing: TargetEncoder for high-cardinality features (e.g., zip codes, product IDs)
       as discussed in Anand & Mamidi (2020).
     """
+
     _numeric_methods = {
         "default": PreprocessingConfig(method="StandardScaler"),
         "finance": PreprocessingConfig(method="RobustScaler"),

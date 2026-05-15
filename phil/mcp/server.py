@@ -688,7 +688,10 @@ def _prepare_dataframe_for_sweep(
     if missingness_thresh is not None:
         missingness = df.isna().mean()
         threshold_drop_cols = sorted(
-            [str(col) for col in missingness[missingness > float(missingness_thresh)].index]
+            [
+                str(col)
+                for col in missingness[missingness > float(missingness_thresh)].index
+            ]
         )
 
     combined_drop_cols = sorted(set(drop_cols) | set(threshold_drop_cols))
@@ -1040,8 +1043,8 @@ async def run_imputation_sweep(
             or session.active_config_dataset_id
         )
 
-        prepared_df, dropped_columns, categorical_codebooks = _prepare_dataframe_for_sweep(
-            df, kwargs=kwargs
+        prepared_df, dropped_columns, categorical_codebooks = (
+            _prepare_dataframe_for_sweep(df, kwargs=kwargs)
         )
         total_missing = int(prepared_df.isna().sum().sum())
         if total_missing == 0:

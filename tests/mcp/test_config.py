@@ -66,7 +66,9 @@ def test_drop_controls_reject_invalid_threshold() -> None:
     config_yaml = "imputation:\n  missingness_thresh: 2\n"
     report = validate_config_yaml(config_yaml)
     assert not report.ok
-    assert any(issue.path == "$.imputation.missingness_thresh" for issue in report.issues)
+    assert any(
+        issue.path == "$.imputation.missingness_thresh" for issue in report.issues
+    )
 
 
 def test_drop_controls_reject_non_string_drop_cols() -> None:

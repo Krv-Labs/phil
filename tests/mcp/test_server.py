@@ -257,7 +257,10 @@ async def test_run_with_drop_controls(csv_path: str, patched_phil) -> None:
         run = _payload(
             await client.call_tool(
                 "run_imputation_sweep",
-                {"config_yaml": refined["config_yaml"], "dataset_id": ingest["dataset_id"]},
+                {
+                    "config_yaml": refined["config_yaml"],
+                    "dataset_id": ingest["dataset_id"],
+                },
             )
         )
         assert run["status"] == "ok", run

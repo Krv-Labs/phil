@@ -44,7 +44,7 @@ class Phil:
         )
         preprocessor.fit(df)
         self.feature_names_out_ = preprocessor.get_feature_names_out().tolist()
-        
+
         imputers = self._create_imputers(preprocessor, max_iter)
         self.selected_imputers = self._select_imputations(imputers)
         return self._apply_imputations(df, self.selected_imputers)
@@ -64,7 +64,7 @@ class Phil:
     ) -> List[Pipeline]:
         imputers = []
         domain_knowledge = getattr(self.param_grid, "domain_knowledge", None)
-        
+
         for method, module, params in zip(
             self.param_grid.methods,
             self.param_grid.modules,
@@ -77,12 +77,22 @@ class Phil:
                     for k, v in param_vals.items()
                     if k in model.__init__.__code__.co_varnames
                 }
-                
-                if domain_knowledge and domain_knowledge.covariance_matrix and "covariance_matrix" in model.__init__.__code__.co_varnames:
-                    compatible_params["covariance_matrix"] = domain_knowledge.covariance_matrix.matrix
-                    
+
+                if (
+                    domain_knowledge
+                    and domain_knowledge.covariance_matrix
+                    and "covariance_matrix" in model.__init__.__code__.co_varnames
+                ):
+                    compatible_params["covariance_matrix"] = (
+                        domain_knowledge.covariance_matrix.matrix
+                    )
+
                 estimator = model(**compatible_params)
-                imputers.append(self._build_pipeline(preprocessor, estimator, max_iter, domain_knowledge))
+                imputers.append(
+                    self._build_pipeline(
+                        preprocessor, estimator, max_iter, domain_knowledge
+                    )
+                )
         return imputers
 
     @staticmethod
@@ -91,13 +101,21 @@ class Phil:
         return getattr(imported_module, method)
 
     def _build_pipeline(
-        self, preprocessor: ColumnTransformer, estimator, max_iter: int, domain_knowledge=None
+        self,
+        preprocessor: ColumnTransformer,
+        estimator,
+        max_iter: int,
+        domain_knowledge=None,
     ) -> Pipeline:
-        
+
         if domain_knowledge and domain_knowledge.covariate_subsets:
             mapped_subsets = {}
             for target, subset_config in domain_knowledge.covariate_subsets.items():
-                target_mapped = f"num__{target}" if f"num__{target}" in self.feature_names_out_ else f"cat__{target}"
+                target_mapped = (
+                    f"num__{target}"
+                    if f"num__{target}" in self.feature_names_out_
+                    else f"cat__{target}"
+                )
                 preds_mapped = []
                 for p in subset_config.predictors:
                     if f"num__{p}" in self.feature_names_out_:
@@ -106,15 +124,15 @@ class Phil:
                         preds_mapped.append(f"cat__{p}")
                     else:
                         preds_mapped.append(p)
-                        
+
                 mapped_subsets[target_mapped] = {"predictors": preds_mapped}
-                
+
             imputer = MaskedIterativeImputer(
                 estimator=estimator,
                 random_state=self.random_state,
                 max_iter=max_iter,
                 covariate_subsets=mapped_subsets,
-                feature_names=self.feature_names_out_
+                feature_names=self.feature_names_out_,
             )
         else:
             imputer = IterativeImputer(
@@ -122,7 +140,7 @@ class Phil:
                 random_state=self.random_state,
                 max_iter=max_iter,
             )
-            
+
         return Pipeline(
             [
                 ("preprocessor", preprocessor),
