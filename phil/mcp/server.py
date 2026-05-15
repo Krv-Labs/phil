@@ -132,6 +132,8 @@ class _PhilSession:
     data_path: str | None = None
     active_config_yaml: str | None = None
     active_config_dataset_id: str | None = None
+    categorical_codebooks: dict[str, list[str]] = field(default_factory=dict)
+    dropped_columns: list[str] = field(default_factory=list)
 
     def calculate_memory_mb(self) -> float:
         bytes_total = 0
@@ -652,6 +654,111 @@ def _coerce_jsonable(value: Any) -> Any:
     return value
 
 
+@dataclass
+class SweepInputError(Exception):
+    reason: str
+    error_code: str
+    agent_action: str
+    details: dict[str, Any] = field(default_factory=dict)
+
+    def __str__(self) -> str:
+        return self.reason
+
+
+def _prepare_dataframe_for_sweep(
+    df: pd.DataFrame, *, kwargs: dict[str, Any]
+) -> tuple[pd.DataFrame, list[str], dict[str, list[str]]]:
+    drop_cols = kwargs.get("drop_cols") or []
+    missingness_thresh = kwargs.get("missingness_thresh")
+    encode_categoricals = kwargs.get("encode_categoricals", True)
+
+    invalid_drop_cols = sorted(set(drop_cols) - set(df.columns))
+    if invalid_drop_cols:
+        raise SweepInputError(
+            reason=f"Invalid drop_cols entries: {invalid_drop_cols}",
+            error_code="INVALID_DROP_COLS",
+            agent_action=(
+                "Provide only columns that exist in the dataset, or remove invalid "
+                "names from imputation.drop_cols."
+            ),
+            details={"invalid_drop_cols": invalid_drop_cols},
+        )
+
+    threshold_drop_cols: list[str] = []
+    if missingness_thresh is not None:
+        missingness = df.isna().mean()
+        threshold_drop_cols = sorted(
+            [str(col) for col in missingness[missingness > float(missingness_thresh)].index]
+        )
+
+    combined_drop_cols = sorted(set(drop_cols) | set(threshold_drop_cols))
+    prepared = df.drop(columns=combined_drop_cols, errors="ignore")
+    if prepared.shape[1] == 0:
+        raise SweepInputError(
+            reason="All columns were dropped before sweep execution.",
+            error_code="ALL_COLUMNS_DROPPED",
+            agent_action=(
+                "Reduce missingness_thresh or drop fewer columns so at least one "
+                "feature remains."
+            ),
+            details={
+                "drop_cols": drop_cols,
+                "threshold_drop_cols": threshold_drop_cols,
+            },
+        )
+
+    categorical_columns = [
+        str(col)
+        for col in prepared.columns
+        if pd.api.types.is_object_dtype(prepared[col])
+        or pd.api.types.is_string_dtype(prepared[col])
+        or pd.api.types.is_categorical_dtype(prepared[col])
+    ]
+    if categorical_columns and not encode_categoricals:
+        raise SweepInputError(
+            reason=f"Unsupported string columns detected: {categorical_columns}.",
+            error_code="UNSUPPORTED_STRING_COLUMNS",
+            agent_action=(
+                "Enable imputation.encode_categoricals or add these columns to "
+                "imputation.drop_cols."
+            ),
+            details={"string_columns": categorical_columns},
+        )
+
+    categorical_codebooks: dict[str, list[str]] = {}
+    for col in categorical_columns:
+        cat = pd.Categorical(prepared[col])
+        categories = [str(v) for v in cat.categories.tolist()]
+        categorical_codebooks[col] = categories
+        codes = pd.Series(cat.codes, index=prepared.index).replace(-1, np.nan)
+        prepared[col] = codes.astype(float)
+
+    return prepared, combined_drop_cols, categorical_codebooks
+
+
+def _decode_categorical_columns(
+    imputed: pd.DataFrame, codebooks: dict[str, list[str]]
+) -> pd.DataFrame:
+    if not codebooks:
+        return imputed
+
+    decoded = imputed.copy()
+    for col, categories in codebooks.items():
+        if col not in decoded.columns:
+            continue
+        if not categories:
+            decoded[col] = np.nan
+            continue
+        numeric = pd.to_numeric(decoded[col], errors="coerce")
+        is_observed = numeric.notna()
+        rounded = np.rint(numeric[is_observed]).astype(int)
+        clipped = np.clip(rounded, 0, len(categories) - 1)
+        restored = pd.Series(np.nan, index=decoded.index, dtype=object)
+        restored.loc[is_observed] = [categories[idx] for idx in clipped]
+        decoded[col] = restored
+    return decoded
+
+
 # ---------------------------------------------------------------------------
 # Configure tools
 # ---------------------------------------------------------------------------
@@ -933,14 +1040,24 @@ async def run_imputation_sweep(
             or session.active_config_dataset_id
         )
 
-        total_missing = int(df.isna().sum().sum())
+        prepared_df, dropped_columns, categorical_codebooks = _prepare_dataframe_for_sweep(
+            df, kwargs=kwargs
+        )
+        total_missing = int(prepared_df.isna().sum().sum())
         if total_missing == 0:
             return mcp_error(
                 "run_imputation_sweep",
-                "Dataset contains no missing values; Phil has nothing to impute.",
+                (
+                    "Dataset contains no missing values after applying drop controls; "
+                    "Phil has nothing to impute."
+                ),
                 error_code="NO_MISSING_VALUES",
                 agent_action="Pass a dataset containing missing values, or skip imputation.",
-                details={"n_rows": int(len(df)), "n_cols": int(df.shape[1])},
+                details={
+                    "n_rows": int(len(prepared_df)),
+                    "n_cols": int(prepared_df.shape[1]),
+                    "dropped_columns": dropped_columns,
+                },
             )
 
         loop = asyncio.get_running_loop()
@@ -967,7 +1084,7 @@ async def run_imputation_sweep(
             )
             progress_callback("imputing", 0.1)
             try:
-                imputed = phil_obj.fit(df, max_iter=kwargs["max_iter"])
+                imputed = phil_obj.fit(prepared_df, max_iter=kwargs["max_iter"])
             except Exception as exc:  # pragma: no cover - defensive
                 raise exc
             progress_callback("scoring", 0.85)
@@ -994,9 +1111,13 @@ async def run_imputation_sweep(
                 agent_action="Inspect the dataset and config; adjust grid or samples.",
             )
 
+        imputed = _decode_categorical_columns(imputed, categorical_codebooks)
+
         session.phil = phil_obj
         session.imputed = imputed
         session.descriptors = descriptors
+        session.categorical_codebooks = categorical_codebooks
+        session.dropped_columns = dropped_columns
 
         stats = _descriptor_stats(descriptors)
         method_counts = _method_counts(phil_obj)
@@ -1039,9 +1160,11 @@ async def run_imputation_sweep(
                 "max_iter": kwargs["max_iter"],
                 "random_state": kwargs["random_state"],
                 "method_counts": method_counts,
-                "n_rows": int(len(df)),
-                "n_cols": int(df.shape[1]),
+                "n_rows": int(len(prepared_df)),
+                "n_cols": int(prepared_df.shape[1]),
                 "total_missing": total_missing,
+                "dropped_columns": dropped_columns,
+                "encoded_categorical_columns": sorted(categorical_codebooks.keys()),
                 "saved_config_path": saved_config_path,
             },
         )
@@ -1070,6 +1193,8 @@ async def run_imputation_sweep(
             "config_yaml": current_yaml,
             "output_path": output_path,
             "saved_config_path": saved_config_path,
+            "dropped_columns": dropped_columns,
+            "encoded_categorical_columns": sorted(categorical_codebooks.keys()),
             "diff_markdown": diff_md,
         }
         return json.dumps(payload, indent=2)
@@ -1077,6 +1202,14 @@ async def run_imputation_sweep(
         return unknown_handle_error("run_imputation_sweep", "dataset_id", dataset_id)
     except FileNotFoundError as e:
         return path_access_error("run_imputation_sweep", str(e))
+    except SweepInputError as e:
+        return mcp_error(
+            "run_imputation_sweep",
+            e.reason,
+            error_code=e.error_code,
+            agent_action=e.agent_action,
+            details=e.details,
+        )
     except Exception as e:
         return mcp_error("run_imputation_sweep", str(e))
 

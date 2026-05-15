@@ -273,6 +273,12 @@ The agent handles missingness analysis, grid selection, descriptor
 scoring, and selection. Your job is to interpret the resulting imputed
 dataset using domain knowledge.
 
+Local Medical Demo
+------------------
+
+For a concrete local workflow (including medical CSV generation and MCP test
+prompts), see ``demos/medical/README.md`` in the repository root.
+
 .. seealso::
 
    - :doc:`/configuration` — programmatic YAML/config reference

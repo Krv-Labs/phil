@@ -41,6 +41,18 @@ class GridGallery:
             modules=["phil.imputation"],
             grids=[ParameterGrid({"random_state": np.arange(0, 100, 1)})],
         ),
+        "covariate_sampling": ImputationConfig(
+            methods=["CovariateDistributionImputer"],
+            modules=["phil.imputation"],
+            grids=[
+                ParameterGrid(
+                    {
+                        "n_neighbors": [3, 5, 10],
+                        "random_state": list(range(10)),
+                    }
+                )
+            ],
+        ),
         "finance": ImputationConfig(
             methods=["IterativeImputer", "KNNImputer", "SimpleImputer"],
             modules=["sklearn.impute"] * 3,

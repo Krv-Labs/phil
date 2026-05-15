@@ -31,7 +31,16 @@ GRID_INTENTS: dict[str, str] = {
 
 _ALLOWED_TOP_LEVEL = {"run", "imputation", "magic", "output"}
 _ALLOWED_RUN = {"name", "data"}
-_ALLOWED_IMPUTATION = {"grid", "custom", "samples", "random_state", "max_iter"}
+_ALLOWED_IMPUTATION = {
+    "grid",
+    "custom",
+    "samples",
+    "random_state",
+    "max_iter",
+    "drop_cols",
+    "missingness_thresh",
+    "encode_categoricals",
+}
 _ALLOWED_CUSTOM = {"methods", "modules", "grids"}
 _ALLOWED_MAGIC = {
     "method",
@@ -98,6 +107,9 @@ def default_config_dict(
             "samples": 30,
             "random_state": 42,
             "max_iter": 5,
+            "drop_cols": [],
+            "missingness_thresh": None,
+            "encode_categoricals": True,
         },
         "magic": {
             "method": "ECT",
@@ -308,6 +320,66 @@ def _validate_imputation(section: Any, issues: list[ValidationIssue]) -> None:
                 )
             )
 
+    if "drop_cols" in section and section["drop_cols"] is not None:
+        drop_cols = section["drop_cols"]
+        if not isinstance(drop_cols, list):
+            issues.append(
+                ValidationIssue(
+                    path="$.imputation.drop_cols",
+                    message="'drop_cols' must be a list of column names.",
+                    received=drop_cols,
+                )
+            )
+        elif any(not isinstance(col, str) for col in drop_cols):
+            issues.append(
+                ValidationIssue(
+                    path="$.imputation.drop_cols",
+                    message="'drop_cols' entries must be strings.",
+                    received=drop_cols,
+                )
+            )
+
+    if (
+        "missingness_thresh" in section
+        and section["missingness_thresh"] is not None
+        and (
+            not isinstance(section["missingness_thresh"], (int, float))
+            or isinstance(section["missingness_thresh"], bool)
+        )
+    ):
+        issues.append(
+            ValidationIssue(
+                path="$.imputation.missingness_thresh",
+                message="'missingness_thresh' must be a number between 0 and 1.",
+                received=section["missingness_thresh"],
+            )
+        )
+    elif (
+        "missingness_thresh" in section
+        and section["missingness_thresh"] is not None
+        and not 0 <= float(section["missingness_thresh"]) <= 1
+    ):
+        issues.append(
+            ValidationIssue(
+                path="$.imputation.missingness_thresh",
+                message="'missingness_thresh' must be between 0 and 1.",
+                received=section["missingness_thresh"],
+            )
+        )
+
+    if (
+        "encode_categoricals" in section
+        and section["encode_categoricals"] is not None
+        and not isinstance(section["encode_categoricals"], bool)
+    ):
+        issues.append(
+            ValidationIssue(
+                path="$.imputation.encode_categoricals",
+                message="'encode_categoricals' must be a boolean.",
+                received=section["encode_categoricals"],
+            )
+        )
+
 
 def _validate_magic(section: Any, issues: list[ValidationIssue]) -> None:
     if section is None:
@@ -500,6 +572,9 @@ def config_to_phil_kwargs(config_yaml: str) -> dict[str, Any]:
         "config": ect_config,
         "random_state": imputation.get("random_state", 42),
         "max_iter": int(imputation.get("max_iter", 5)),
+        "drop_cols": list(imputation.get("drop_cols", [])),
+        "missingness_thresh": imputation.get("missingness_thresh"),
+        "encode_categoricals": bool(imputation.get("encode_categoricals", True)),
         "run_name": normalized.get("run", {}).get("name") or "phil_sweep",
         "data_path": normalized.get("run", {}).get("data") or "",
     }

@@ -1,0 +1,11 @@
+age,resting_bp,cholesterol,sex,pain_type,risk_group
+63,145,233,M,typical,high
+54,,250,F,asymptomatic,high
+,130,,M,,medium
+48,120,204,F,non-anginal,low
+59,138,236,M,typical,high
+67,,280,M,,high
+45,128,,F,atypical,low
+,118,190,F,typical,low
+71,150,300,,asymptomatic,high
+52,132,221,M,non-anginal,

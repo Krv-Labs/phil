@@ -86,6 +86,9 @@ Polars users write to Parquet and ingest the file path. See the
 [MCP guide](docs/source/userGuides/mcp.rst) for setup tabs, the full tool
 table, and an example dialog.
 
+For local end-to-end testing with medical missing-data examples, use
+[`demos/medical`](demos/medical/README.md).
+
 ## Configuration
 
 ### Imputation grids

@@ -230,3 +230,79 @@ async def test_refine_active_config_round_trip(csv_path: str) -> None:
         assert any(d["path"] == "imputation.samples" for d in refined["diff"])
         active = _payload(await client.call_tool("get_active_config", {}))
         assert "samples: 7" in active["config_yaml"]
+
+
+@pytest.mark.asyncio
+async def test_run_with_drop_controls(csv_path: str, patched_phil) -> None:
+    async with Client(mcp) as client:
+        ingest = _payload(await client.call_tool("ingest_dataset", {"path": csv_path}))
+        cfg = _payload(
+            await client.call_tool(
+                "create_config",
+                {"dataset_id": ingest["dataset_id"], "samples": 3},
+            )
+        )
+        refined = _payload(
+            await client.call_tool(
+                "refine_config",
+                {
+                    "config_yaml": cfg["config_yaml"],
+                    "overrides": {
+                        "imputation.drop_cols": ["income"],
+                        "imputation.missingness_thresh": 0.1,
+                    },
+                },
+            )
+        )
+        run = _payload(
+            await client.call_tool(
+                "run_imputation_sweep",
+                {"config_yaml": refined["config_yaml"], "dataset_id": ingest["dataset_id"]},
+            )
+        )
+        assert run["status"] == "ok", run
+        assert "income" in run["dropped_columns"]
+
+
+@pytest.mark.asyncio
+async def test_run_rejects_invalid_drop_cols(csv_path: str, patched_phil) -> None:
+    config_yaml = f"""run:
+  name: bad_drop
+  data: {csv_path}
+imputation:
+  grid: default
+  samples: 3
+  drop_cols: [missing_col]
+"""
+    async with Client(mcp) as client:
+        run = _payload(
+            await client.call_tool(
+                "run_imputation_sweep",
+                {"config_yaml": config_yaml},
+            )
+        )
+        assert run["status"] == "error"
+        assert run["error_code"] == "INVALID_DROP_COLS"
+
+
+@pytest.mark.asyncio
+async def test_run_rejects_string_columns_when_encoding_disabled(
+    csv_path: str, patched_phil
+) -> None:
+    config_yaml = f"""run:
+  name: no_encoding
+  data: {csv_path}
+imputation:
+  grid: default
+  samples: 3
+  encode_categoricals: false
+"""
+    async with Client(mcp) as client:
+        run = _payload(
+            await client.call_tool(
+                "run_imputation_sweep",
+                {"config_yaml": config_yaml},
+            )
+        )
+        assert run["status"] == "error"
+        assert run["error_code"] == "UNSUPPORTED_STRING_COLUMNS"
