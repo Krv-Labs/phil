@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
 from sklearn.metrics.pairwise import euclidean_distances
+from scipy.spatial.distance import cdist
 
 
 class CovariateDistributionImputer(BaseEstimator):
@@ -20,6 +21,7 @@ class CovariateDistributionImputer(BaseEstimator):
         missing_values=np.nan,
         random_state=None,
         threshold: float = 1.0,
+        covariance_matrix=None,
     ):
         if not 0 <= threshold <= 1:
             raise ValueError("threshold must be between 0 and 1")
@@ -29,6 +31,7 @@ class CovariateDistributionImputer(BaseEstimator):
         self.missing_values = missing_values
         self.random_state = random_state
         self.threshold = threshold
+        self.covariance_matrix = covariance_matrix
 
     def fit(self, X, y) -> "CovariateDistributionImputer":
         X = np.asarray(X)
@@ -45,6 +48,14 @@ class CovariateDistributionImputer(BaseEstimator):
             y = y.astype(float, copy=True)
         else:
             y = y.astype(object, copy=True)
+
+        if self.covariance_matrix is not None:
+            cov = np.asarray(self.covariance_matrix)
+            if cov.shape[0] != X.shape[1] or cov.shape[1] != X.shape[1]:
+                raise ValueError("covariance_matrix must be square with dimensions matching X.")
+            self.VI_ = np.linalg.inv(cov)
+        else:
+            self.VI_ = None
 
         missing_mask = (y == self.missing_values) | pd.isnull(y)
         fraction_missing = missing_mask.sum() / y.size
@@ -83,7 +94,12 @@ class CovariateDistributionImputer(BaseEstimator):
             return np.full(n_samples, np.nan, dtype=float)
 
         k = min(self.n_neighbors, len(self.y_obs_))
-        dists = euclidean_distances(X, self.X_obs_)
+        
+        if self.VI_ is not None:
+            dists = cdist(X, self.X_obs_, metric='mahalanobis', VI=self.VI_)
+        else:
+            dists = euclidean_distances(X, self.X_obs_)
+            
         neighbor_idxs = np.argpartition(dists, k - 1, axis=1)[:, :k]
 
         predictions = np.empty(n_samples, dtype=object if self.is_categorical_ else float)

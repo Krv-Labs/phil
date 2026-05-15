@@ -40,6 +40,7 @@ _ALLOWED_IMPUTATION = {
     "drop_cols",
     "missingness_thresh",
     "encode_categoricals",
+    "domain_knowledge",
 }
 _ALLOWED_CUSTOM = {"methods", "modules", "grids"}
 _ALLOWED_MAGIC = {
@@ -257,45 +258,47 @@ def _validate_imputation(section: Any, issues: list[ValidationIssue]) -> None:
                 )
             )
             return
-        unknown_custom = sorted(set(custom.keys()) - _ALLOWED_CUSTOM)
-        for key in unknown_custom:
+        _validate_custom(custom, issues)
+
+    domain_knowledge = section.get("domain_knowledge")
+    if domain_knowledge is not None:
+        if not isinstance(domain_knowledge, dict):
             issues.append(
                 ValidationIssue(
-                    path=f"$.imputation.custom.{key}",
-                    message=f"Unknown key '{key}' under 'imputation.custom'.",
-                    expected=f"One of {sorted(_ALLOWED_CUSTOM)}",
+                    path="$.imputation.domain_knowledge",
+                    message="'domain_knowledge' must be a mapping."
                 )
             )
-        for required in ("methods", "modules", "grids"):
-            if required not in custom:
-                issues.append(
-                    ValidationIssue(
-                        path=f"$.imputation.custom.{required}",
-                        message=f"Missing required key '{required}' for custom grid.",
+        else:
+            cov_subsets = domain_knowledge.get("covariate_subsets")
+            if cov_subsets is not None:
+                if not isinstance(cov_subsets, dict):
+                    issues.append(ValidationIssue(path="$.imputation.domain_knowledge.covariate_subsets", message="Must be a mapping."))
+                else:
+                    for target, mapping in cov_subsets.items():
+                        if not isinstance(mapping, dict):
+                            issues.append(ValidationIssue(path=f"$.imputation.domain_knowledge.covariate_subsets.{target}", message="Must be a mapping."))
+                            continue
+                        if not mapping.get("citations"):
+                            issues.append(
+                                ValidationIssue(
+                                    path=f"$.imputation.domain_knowledge.covariate_subsets.{target}.citations",
+                                    message="Citations are required when using covariate_subsets.",
+                                    suggestion="Provide a list of citations justifying the chosen predictors."
+                                )
+                            )
+            cov_matrix = domain_knowledge.get("covariance_matrix")
+            if cov_matrix is not None:
+                if not isinstance(cov_matrix, dict):
+                    issues.append(ValidationIssue(path="$.imputation.domain_knowledge.covariance_matrix", message="Must be a mapping."))
+                elif not cov_matrix.get("citations"):
+                    issues.append(
+                        ValidationIssue(
+                            path="$.imputation.domain_knowledge.covariance_matrix.citations",
+                            message="Citations are required when using covariance_matrix.",
+                            suggestion="Provide a list of citations justifying the custom covariance matrix."
+                        )
                     )
-                )
-                continue
-            if not isinstance(custom[required], list):
-                issues.append(
-                    ValidationIssue(
-                        path=f"$.imputation.custom.{required}",
-                        message=f"'{required}' must be a list.",
-                    )
-                )
-        if (
-            isinstance(custom.get("methods"), list)
-            and isinstance(custom.get("modules"), list)
-            and isinstance(custom.get("grids"), list)
-            and not (
-                len(custom["methods"]) == len(custom["modules"]) == len(custom["grids"])
-            )
-        ):
-            issues.append(
-                ValidationIssue(
-                    path="$.imputation.custom",
-                    message="methods, modules, and grids must have the same length.",
-                )
-            )
 
     for int_key in ("samples", "random_state", "max_iter"):
         if int_key in section and section[int_key] is not None:
@@ -334,38 +337,29 @@ def _validate_imputation(section: Any, issues: list[ValidationIssue]) -> None:
             issues.append(
                 ValidationIssue(
                     path="$.imputation.drop_cols",
-                    message="'drop_cols' entries must be strings.",
+                    message="'drop_cols' must contain only string column names.",
                     received=drop_cols,
                 )
             )
 
-    if (
-        "missingness_thresh" in section
-        and section["missingness_thresh"] is not None
-        and (
-            not isinstance(section["missingness_thresh"], (int, float))
-            or isinstance(section["missingness_thresh"], bool)
-        )
-    ):
-        issues.append(
-            ValidationIssue(
-                path="$.imputation.missingness_thresh",
-                message="'missingness_thresh' must be a number between 0 and 1.",
-                received=section["missingness_thresh"],
+    if "missingness_thresh" in section and section["missingness_thresh"] is not None:
+        thresh = section["missingness_thresh"]
+        if not isinstance(thresh, (int, float)) or isinstance(thresh, bool):
+            issues.append(
+                ValidationIssue(
+                    path="$.imputation.missingness_thresh",
+                    message="'missingness_thresh' must be a float between 0.0 and 1.0.",
+                    received=thresh,
+                )
             )
-        )
-    elif (
-        "missingness_thresh" in section
-        and section["missingness_thresh"] is not None
-        and not 0 <= float(section["missingness_thresh"]) <= 1
-    ):
-        issues.append(
-            ValidationIssue(
-                path="$.imputation.missingness_thresh",
-                message="'missingness_thresh' must be between 0 and 1.",
-                received=section["missingness_thresh"],
+        elif not (0.0 <= thresh <= 1.0):
+            issues.append(
+                ValidationIssue(
+                    path="$.imputation.missingness_thresh",
+                    message="'missingness_thresh' must be between 0.0 and 1.0 inclusive.",
+                    received=thresh,
+                )
             )
-        )
 
     if (
         "encode_categoricals" in section
@@ -380,6 +374,49 @@ def _validate_imputation(section: Any, issues: list[ValidationIssue]) -> None:
             )
         )
 
+
+def _validate_custom(custom: dict[str, Any], issues: list[ValidationIssue]) -> None:
+    unknown_custom = sorted(set(custom.keys()) - _ALLOWED_CUSTOM)
+    for key in unknown_custom:
+        issues.append(
+            ValidationIssue(
+                path=f"$.imputation.custom.{key}",
+                message=f"Unknown key '{key}' under 'imputation.custom'.",
+                expected=f"One of {sorted(_ALLOWED_CUSTOM)}",
+            )
+        )
+    for required in ("methods", "modules", "grids"):
+        if required not in custom:
+            issues.append(
+                ValidationIssue(
+                    path=f"$.imputation.custom.{required}",
+                    message=f"Missing required key '{required}' for custom grid.",
+                )
+            )
+            continue
+        if not isinstance(custom[required], list):
+            issues.append(
+                ValidationIssue(
+                    path=f"$.imputation.custom.{required}",
+                    message=f"'{required}' must be a list.",
+                )
+            )
+        if (
+            isinstance(custom.get("methods"), list)
+            and isinstance(custom.get("modules"), list)
+            and isinstance(custom.get("grids"), list)
+            and not (
+                len(custom["methods"])
+                == len(custom["modules"])
+                == len(custom["grids"])
+            )
+        ):
+            issues.append(
+                ValidationIssue(
+                    path="$.imputation.custom",
+                    message="methods, modules, and grids lists must have the same length.",
+                )
+            )
 
 def _validate_magic(section: Any, issues: list[ValidationIssue]) -> None:
     if section is None:
@@ -496,6 +533,9 @@ def _allowed_override_paths() -> set[str]:
         paths.add(f"run.{key}")
     for key in _ALLOWED_IMPUTATION:
         if key == "custom":
+            continue
+        if key == "domain_knowledge":
+            paths.add(f"imputation.{key}")
             continue
         paths.add(f"imputation.{key}")
     for key in _ALLOWED_CUSTOM:
