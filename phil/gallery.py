@@ -11,6 +11,16 @@ from phil.magic import ECTConfig
 
 
 class GridGallery:
+    """
+    Collection of imputation grids optimized for specific domains.
+
+    Citations:
+    - Sampling/Multiverse: Wayland et al. (2025) - https://www.nature.com/articles/s41560-025-01871-0
+    - Finance: Gu, Kelly, & Xiu (2020) on ML for asset pricing and robust ML portfolios.
+    - Healthcare: Stekhoven & Bühlmann (2011) on MissForest and Chen et al. (2023) on clinical imputation.
+    - Marketing: Anand & Mamidi (2020) / Zhang et al. (2025) on ML for consumer analytics.
+    - Engineering: Thomas & Rajabi (2021) and Idri et al. (2016) on systematic reviews of engineering data.
+    """
     _grids = {
         "default": ImputationConfig(
             methods=[
@@ -57,7 +67,16 @@ class GridGallery:
             methods=["IterativeImputer", "KNNImputer", "SimpleImputer"],
             modules=["sklearn.impute"] * 3,
             grids=[
-                ParameterGrid({"estimator": ["BayesianRidge"], "max_iter": [10, 50]}),
+                ParameterGrid(
+                    {
+                        "estimator": [
+                            "BayesianRidge",
+                            "RandomForestRegressor",
+                            "KNeighborsRegressor",
+                        ],
+                        "max_iter": [10],
+                    }
+                ),
                 ParameterGrid(
                     {"n_neighbors": [3, 5, 10], "weights": ["uniform", "distance"]}
                 ),
@@ -71,7 +90,14 @@ class GridGallery:
                 ParameterGrid({"n_neighbors": [5, 10], "weights": ["distance"]}),
                 ParameterGrid({"strategy": ["median", "most_frequent"]}),
                 ParameterGrid(
-                    {"estimator": ["RandomForestRegressor"], "max_iter": [10, 20]}
+                    {
+                        "estimator": [
+                            "BayesianRidge",
+                            "RandomForestRegressor",
+                            "ExtraTreesRegressor",
+                        ],
+                        "max_iter": [10],
+                    }
                 ),
             ],
         ),
@@ -87,7 +113,14 @@ class GridGallery:
                 ),
                 ParameterGrid({"n_neighbors": [3, 5], "weights": ["uniform"]}),
                 ParameterGrid(
-                    {"estimator": ["GradientBoostingRegressor"], "max_iter": [10, 30]}
+                    {
+                        "estimator": [
+                            "BayesianRidge",
+                            "GradientBoostingRegressor",
+                            "DecisionTreeRegressor",
+                        ],
+                        "max_iter": [10],
+                    }
                 ),
             ],
         ),
@@ -98,7 +131,14 @@ class GridGallery:
                 ParameterGrid({"strategy": ["mean", "median"]}),
                 ParameterGrid({"n_neighbors": [3, 5, 7], "weights": ["distance"]}),
                 ParameterGrid(
-                    {"estimator": ["DecisionTreeRegressor"], "max_iter": [10, 20]}
+                    {
+                        "estimator": [
+                            "BayesianRidge",
+                            "DecisionTreeRegressor",
+                            "ExtraTreesRegressor",
+                        ],
+                        "max_iter": [10],
+                    }
                 ),
             ],
         ),
@@ -110,11 +150,17 @@ class GridGallery:
 
 
 class ProcessingGallery:
+    """
+    Collection of preprocessing configurations optimized for specific domains.
+
+    Citations:
+    - Finance: RobustScaler for handling outliers in financial time series and asset data.
+    - Marketing: TargetEncoder for high-cardinality features (e.g., zip codes, product IDs) 
+      as discussed in Anand & Mamidi (2020).
+    """
     _numeric_methods = {
         "default": PreprocessingConfig(method="StandardScaler"),
-        "finance": PreprocessingConfig(
-            method="MinMaxScaler", params={"feature_range": [(0, 1)]}
-        ),
+        "finance": PreprocessingConfig(method="RobustScaler"),
         "healthcare": PreprocessingConfig(method="RobustScaler"),
         "marketing": PreprocessingConfig(
             method="PowerTransformer", params={"method": ["yeo-johnson"]}
@@ -131,10 +177,7 @@ class ProcessingGallery:
             method="OrdinalEncoder",
             params={"handle_unknown": ["use_encoded_value"]},
         ),
-        "marketing": PreprocessingConfig(
-            method="OneHotEncoder",
-            params={"sparse": [False], "handle_unknown": ["ignore"]},
-        ),
+        "marketing": PreprocessingConfig(method="TargetEncoder"),
     }
 
     @classmethod
