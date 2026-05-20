@@ -11,7 +11,7 @@ Phil generates multiple candidate imputations using configurable sklearn pipelin
 Quick Links
 -----------
 
-.. grid:: 1 2 3 3
+.. grid:: 1 2 2 2
    :gutter: 3
    :padding: 2 2 0 0
 
@@ -38,6 +38,14 @@ Quick Links
       :shadow: md
 
       Full API documentation for :mod:`phil`.
+
+   .. grid-item-card:: :octicon:`hubot` MCP Server
+      :link: mcp
+      :link-type: ref
+      :class-card: intro-card
+      :shadow: md
+
+      Run Phil sweeps from Claude, Cursor, or any MCP-capable agent.
 
 What is Phil?
 -------------

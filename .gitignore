@@ -3,6 +3,7 @@ notebooks
 .python-version
 .DS_Store
 docs/build/
+demos/*/data/
 
 #Python env
 uv.lock

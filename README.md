@@ -51,6 +51,44 @@ pipe = Pipeline([
 pipe.fit(X_train, y_train)
 ```
 
+## MCP Server
+
+Phil ships a [FastMCP](https://gofastmcp.com)-based MCP server that lets
+Claude, Cursor, Gemini CLI, and other MCP-capable agents run imputation
+sweeps on your pandas or polars dataframes without writing Python.
+
+Install the `mcp` extra and launch the server with `uv tool run` or `pipx`:
+
+```bash
+pip install "philler[mcp]"
+phil-mcp                                  # persistent install
+# or, ephemeral via uv:
+uv tool run --from "philler[mcp]" phil-mcp
+```
+
+Example Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "phil": {
+      "command": "uv tool run",
+      "args": ["--from", "philler[mcp]", "phil-mcp"]
+    }
+  }
+}
+```
+
+The server exposes tools for the full sweep workflow — `ingest_dataset`,
+`characterize_dataset`, `list_grids`, `create_config`, `validate_config`,
+`run_imputation_sweep`, `diagnose_sweep`, `export_imputed_data`, and more.
+Polars users write to Parquet and ingest the file path. See the
+[MCP guide](docs/source/userGuides/mcp.rst) for setup tabs, the full tool
+table, and an example dialog.
+
+For local end-to-end testing with medical missing-data examples, use
+[`demos/medical`](demos/medical/README.md).
+
 ## Configuration
 
 ### Imputation grids

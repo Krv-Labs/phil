@@ -60,6 +60,14 @@ Going Deeper
 
       Custom strategies and descriptor configuration.
 
+   .. grid-item-card:: :octicon:`hubot` MCP Server
+      :link: userGuides/mcp
+      :link-type: doc
+      :class-card: intro-card
+      :shadow: md
+
+      Drive Phil sweeps from Claude, Cursor, or any MCP-capable agent.
+
 Production & Quality
 --------------------
 
@@ -93,5 +101,6 @@ Production & Quality
    userGuides/programmatic
    userGuides/intermediate
    userGuides/advanced
+   userGuides/mcp
    userGuides/best_practices
    userGuides/testing
