@@ -9,7 +9,7 @@ selects the most representative imputation from the candidate set.
 ## Installation
 
 ```bash
-pip install phil
+pip install philler
 ```
 
 `phil` requires the `trailed` backend for ECT computation. Install it from the
