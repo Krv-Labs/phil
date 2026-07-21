@@ -86,6 +86,10 @@ async def test_list_grids_returns_builtins() -> None:
         names = {g["name"] for g in payload["grids"]}
         assert "default" in names
         assert "healthcare" in names
+        healthcare = next(g for g in payload["grids"] if g["name"] == "healthcare")
+        assert healthcare["time_complexity"] == "High"
+        assert healthcare["suitability"]
+        assert "scale_limits" in healthcare
 
 
 @pytest.mark.asyncio
@@ -309,3 +313,4 @@ imputation:
         )
         assert run["status"] == "error"
         assert run["error_code"] == "UNSUPPORTED_STRING_COLUMNS"
+

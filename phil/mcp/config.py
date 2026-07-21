@@ -15,18 +15,15 @@ from typing import Any
 import yaml
 from sklearn.model_selection import ParameterGrid
 
-from phil.gallery import GridGallery
+from phil.gallery import GRID_METADATA, GridGallery
 from phil.imputation import ImputationConfig
 from phil.magic import ECTConfig
 
 
+# Derived from gallery.GRID_METADATA so MCP blurbs cannot drift from the
+# declarative metadata source of truth.
 GRID_INTENTS: dict[str, str] = {
-    "default": "Mixed regression imputers across BayesianRidge, Decision Tree, Random Forest, and Gradient Boosting.",
-    "sampling": "Distribution sampling imputation across 100 seeds (good for preserving marginals).",
-    "finance": "Iterative + KNN + Simple imputers tuned for tabular financial data.",
-    "healthcare": "KNN, Simple, and Iterative imputers tuned for clinical tables.",
-    "marketing": "Categorical-friendly Simple, KNN, and Iterative imputers.",
-    "engineering": "Robust mean/median + KNN + Decision-Tree iterative imputation for sensor data.",
+    name: meta.intent for name, meta in GRID_METADATA.items()
 }
 
 _ALLOWED_TOP_LEVEL = {"run", "imputation", "magic", "output"}
@@ -635,16 +632,28 @@ def config_to_phil_kwargs(config_yaml: str) -> dict[str, Any]:
 
 
 def list_builtin_grids() -> list[dict[str, Any]]:
-    """Return a list of built-in grid descriptions."""
+    """Return a list of built-in grid descriptions with declarative metadata."""
     payload: list[dict[str, Any]] = []
     for name in sorted(_BUILTIN_GRIDS):
         grid: ImputationConfig = GridGallery.get(name)
-        payload.append(
-            {
-                "name": name,
-                "intent": GRID_INTENTS.get(name, ""),
-                "methods": list(grid.methods),
-                "modules": list(grid.modules),
-            }
-        )
+        meta = GRID_METADATA.get(name)
+        entry: dict[str, Any] = {
+            "name": name,
+            "intent": GRID_INTENTS.get(name, ""),
+            "methods": list(grid.methods),
+            "modules": list(grid.modules),
+        }
+        if meta is not None:
+            entry.update(
+                {
+                    "target_domain": meta.target_domain,
+                    "suitability": meta.suitability,
+                    "data_type_affinity": list(meta.data_type_affinity),
+                    "time_complexity": meta.time_complexity,
+                    "scale_limits": meta.scale_limits,
+                }
+            )
+        payload.append(entry)
     return payload
+
+

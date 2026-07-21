@@ -769,7 +769,8 @@ def _decode_categorical_columns(
 async def list_grids(ctx: Context = None) -> str:
     """
     Return the built-in imputation grids registered with Phil's
-    ``GridGallery``, including the method list and intent blurb.
+    ``GridGallery``, including method lists and declarative metadata
+    (intent, suitability, affinity, time complexity, scale limits).
     """
     try:
         payload = {

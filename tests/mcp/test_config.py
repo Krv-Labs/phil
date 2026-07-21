@@ -144,3 +144,16 @@ def test_list_builtin_grids_includes_default() -> None:
     assert "healthcare" in names
     default_entry = next(g for g in grids if g["name"] == "default")
     assert default_entry["methods"]
+    assert default_entry["target_domain"] == "general"
+    assert default_entry["time_complexity"] in {"Low", "Medium", "High"}
+    assert default_entry["suitability"]
+    assert default_entry["data_type_affinity"]
+    assert default_entry["scale_limits"]
+
+
+def test_list_builtin_grids_healthcare_metadata() -> None:
+    grids = list_builtin_grids()
+    healthcare = next(g for g in grids if g["name"] == "healthcare")
+    assert healthcare["time_complexity"] == "High"
+    assert "KNN" in healthcare["scale_limits"] or "100" in healthcare["scale_limits"]
+
