@@ -93,6 +93,41 @@ async def test_list_grids_returns_builtins() -> None:
 
 
 @pytest.mark.asyncio
+async def test_recommend_grid_after_ingest(csv_path: str) -> None:
+    async with Client(mcp) as client:
+        ingest = _payload(await client.call_tool("ingest_dataset", {"path": csv_path}))
+        dataset_id = ingest["dataset_id"]
+        result = _payload(
+            await client.call_tool("recommend_grid", {"dataset_id": dataset_id})
+        )
+        assert result["status"] == "ok"
+        assert result["recommended_grid"] in {
+            "default",
+            "sampling",
+            "finance",
+            "healthcare",
+            "marketing",
+            "engineering",
+        }
+        assert "suggested_samples" in result
+        assert "Recommended Grid:" in result["recommendation"]
+        assert result["grid"]["name"] == result["recommended_grid"]
+
+
+@pytest.mark.asyncio
+async def test_imputation_matrix_resource() -> None:
+    async with Client(mcp) as client:
+        resources = await client.list_resources()
+        uris = {str(r.uri) for r in resources}
+        assert "phil://docs/imputation-matrix" in uris
+        contents = await client.read_resource("phil://docs/imputation-matrix")
+        text = "".join(
+            getattr(part, "text", "") or "" for part in contents
+        )
+        assert "Phil Imputation Grid Matrix" in text
+        assert "`healthcare`" in text
+
+@pytest.mark.asyncio
 async def test_end_to_end_csv_sweep(
     csv_path: str, tmp_path: Path, patched_phil
 ) -> None:

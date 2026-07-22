@@ -205,8 +205,10 @@ chains them together:
      - Sparse per-column schema: dtype, n_unique, missing percent, plus aggregate row/column counts. Cheap and safe to call on wide datasets.
    * - **probe_columns**
      - Deep per-column inspection for up to 20 columns at a time: sample values, top frequencies, basic numeric statistics.
+   * - **recommend_grid**
+     - Rule-based grid recommendation from dataset scale, categorical cardinality, and missingness. Returns a concrete grid, suggested ``samples``, warnings, and rationale.
    * - **list_grids**
-     - Enumerates the named ``GridGallery`` entries (``default``, ``sampling``, ``finance``, ``healthcare``, ``marketing``, ``engineering``) with method lists and intent blurbs.
+     - Enumerates the named ``GridGallery`` entries (``default``, ``sampling``, ``finance``, ``healthcare``, ``marketing``, ``engineering``) with declarative metadata (intent, suitability, affinity, time complexity, scale limits).
    * - **create_config**
      - Materializes a canonical YAML config tailored to a ``dataset_id`` and grid choice. Stores it on the session so subsequent ``refine_active_config`` / ``run_imputation_sweep`` calls can omit it.
    * - **validate_config**
@@ -230,6 +232,13 @@ chains them together:
    * - **export_imputed_data**
      - Writes the selected imputed DataFrame to disk; CSV / Parquet / Feather inferred from the extension.
 
+Resources
+^^^^^^^^^
+
+* ``phil://docs/imputation-matrix`` — Markdown comparison matrix of built-in
+  grids (domain, complexity, affinity, scale limits, estimator cost notes),
+  compiled from declarative ``GRID_METADATA``.
+
 Example: A Mixed-Type Frame with Missing Values
 -----------------------------------------------
 
@@ -250,7 +259,7 @@ A successful agent dialog looks like:
 1. ``ingest_dataset("/data/demo.csv")`` → ``dataset_id="ds_abc123"``
 2. ``characterize_dataset("ds_abc123")`` → reports 4 missing in ``income``,
    1 missing in ``category``, etc.
-3. ``list_grids()`` → agent picks ``default``
+3. ``recommend_grid("ds_abc123")`` → recommends ``default`` with suggested samples
 4. ``create_config("ds_abc123", grid="default", samples=20)``
 5. ``run_imputation_sweep`` → returns ``selected_index=7``,
    ``descriptor_stats.mean_pairwise_l2=0.14``

@@ -27,6 +27,7 @@ import yaml
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 
+from phil.gallery import render_imputation_matrix
 from phil.mcp.config import (
     GRID_INTENTS,
     apply_overrides,
@@ -38,6 +39,7 @@ from phil.mcp.config import (
 )
 from phil.mcp.errors import mcp_error, path_access_error, unknown_handle_error
 from phil.mcp.prompts import WORKFLOW_PROMPT
+from phil.mcp.recommend import recommend_grid_for_dataframe
 from phil.mcp.registry import MCPRegistry
 from phil.phil import Phil
 
@@ -94,14 +96,28 @@ mcp = FastMCP(
         "`finalize_dataset_upload` trio for sandboxed clients. Returns a "
         "`dataset_id` handle. Polars users: write to Parquet, then ingest.\n"
         "- Characterize: `characterize_dataset`, `probe_columns`.\n"
-        "- Configure: `list_grids`, `create_config`, `validate_config`, "
-        "`refine_config`, `get_active_config`, `refine_active_config`.\n"
+        "- Configure: `recommend_grid`, `list_grids`, `create_config`, "
+        "`validate_config`, `refine_config`, `get_active_config`, "
+        "`refine_active_config`. Resource: `phil://docs/imputation-matrix`.\n"
         "- Run: `run_imputation_sweep`.\n"
         "- Diagnose: `diagnose_sweep`, `get_candidate_descriptors`, "
         "`compare_sweeps`, `get_experiment_history`.\n"
         "- Export: `get_sweep_summary`, `export_imputed_data`."
     ),
 )
+
+@mcp.resource(
+    "phil://docs/imputation-matrix",
+    mime_type="text/markdown",
+    description=(
+        "Markdown comparison matrix of built-in imputation grids: domain, "
+        "complexity, affinity, scale limits, and estimator cost notes. "
+        "Compiled from declarative GRID_METADATA."
+    ),
+)
+def imputation_matrix_resource() -> str:
+    """Return the dynamically compiled imputation-grid comparison matrix."""
+    return render_imputation_matrix()
 
 
 # ---------------------------------------------------------------------------
@@ -785,6 +801,36 @@ async def list_grids(ctx: Context = None) -> str:
         return json.dumps(payload, indent=2)
     except Exception as e:
         return mcp_error("list_grids", str(e))
+
+
+@mcp.tool()
+async def recommend_grid(
+    dataset_id: str = "",
+    data_path: str = "",
+    ctx: Context = None,
+) -> str:
+    """
+    Recommend a built-in imputation grid from dataset scale, categorical
+    cardinality, and missingness heuristics. Prefer this after
+    ``characterize_dataset`` and before ``create_config``.
+    """
+    try:
+        session = _get_session(ctx)
+        df, normalized_path = await _load_session_dataframe(
+            session, dataset_id=dataset_id, data_path=data_path
+        )
+        payload = recommend_grid_for_dataframe(df)
+        payload["dataset_id"] = dataset_id or None
+        payload["data_path"] = normalized_path
+        return json.dumps(payload, indent=2)
+    except LookupError:
+        return unknown_handle_error("recommend_grid", "dataset_id", dataset_id)
+    except FileNotFoundError:
+        return path_access_error("recommend_grid", data_path or dataset_id)
+    except ToolError as e:
+        return mcp_error("recommend_grid", str(e))
+    except Exception as e:
+        return mcp_error("recommend_grid", str(e))
 
 
 @mcp.tool()

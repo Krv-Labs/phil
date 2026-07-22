@@ -28,26 +28,30 @@ that happens to converge.
    sweep — Phil cannot impute fully-empty features.
 
 ## PHASE II: CONFIGURE & VALIDATE
-4. Discover grids: `list_grids()` enumerates the named imputation grids
+4. Recommend a grid: `recommend_grid(dataset_id)` applies scale,
+   cardinality, and missingness heuristics and returns a concrete grid
+   plus suggested `samples`. Optionally read the MCP resource
+   `phil://docs/imputation-matrix` for the full comparison table.
+5. Discover grids: `list_grids()` enumerates the named imputation grids
    (`default`, `sampling`, `finance`, `healthcare`, `marketing`,
-   `engineering`) with their method lists. Pick the one whose intent
-   matches your dataset.
-5. Create the config: `create_config(dataset_id, grid="...")` returns a
+   `engineering`) with declarative metadata (intent, suitability,
+   affinity, time complexity, scale limits).
+6. Create the config: `create_config(dataset_id, grid="...")` returns a
    canonical YAML scaffold. You can refine it with `refine_config` or
    keep it in-session via `refine_active_config`.
-6. Validate: `validate_config(config_yaml, dataset_id)` confirms the
+7. Validate: `validate_config(config_yaml, dataset_id)` confirms the
    shape, resolves grid names, and normalizes whitespace.
 
 ## PHASE III: RUN, DIAGNOSE, EXPORT
-7. Run: `run_imputation_sweep` fits `samples` candidate imputations,
+8. Run: `run_imputation_sweep` fits `samples` candidate imputations,
    scores each with the ECT magic method, and selects the candidate
    closest to the mean descriptor. Returns a markdown diff against the
    previous run.
-8. Diagnose: `diagnose_sweep` reports descriptor spread, selected
+9. Diagnose: `diagnose_sweep` reports descriptor spread, selected
    candidate index, and per-method candidate counts. If spread is near
    zero the grid is collapsing — broaden it. If spread is huge,
    consider raising `samples`.
-9. Export: `export_imputed_data(run_id, output_path)` writes the chosen
+10. Export: `export_imputed_data(run_id, output_path)` writes the chosen
    imputed dataframe to disk (CSV or Parquet by file extension).
 
 ## PHILOSOPHY
