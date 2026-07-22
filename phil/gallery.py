@@ -314,8 +314,7 @@ class GridGallery:
             grids=[
                 ParameterGrid(
                     {
-                        "strategy": ["most_frequent", "constant"],
-                        "fill_value": ["unknown"],
+                        "strategy": ["most_frequent", "mean", "median"],
                     }
                 ),
                 ParameterGrid({"n_neighbors": [3, 5], "weights": ["uniform"]}),

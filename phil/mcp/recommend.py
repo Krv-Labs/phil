@@ -21,6 +21,13 @@ def _is_categorical_series(series: pd.Series) -> bool:
     )
 
 
+def _is_high_cardinality_id(series: pd.Series) -> bool:
+    """Integer columns with many distinct values behave like categorical IDs."""
+    if not pd.api.types.is_integer_dtype(series):
+        return False
+    return int(series.nunique(dropna=True)) >= _HIGH_CARDINALITY_UNIQUE
+
+
 def _frame_metrics(df: pd.DataFrame) -> dict[str, Any]:
     n_rows = int(len(df))
     n_cols = int(df.shape[1])
@@ -35,11 +42,15 @@ def _frame_metrics(df: pd.DataFrame) -> dict[str, Any]:
     high_cardinality_columns: list[str] = []
     for col in df.columns:
         series = df[col]
-        if not _is_categorical_series(series):
-            continue
         name = str(col)
-        categorical_columns.append(name)
-        if int(series.nunique(dropna=True)) >= _HIGH_CARDINALITY_UNIQUE:
+        n_unique = int(series.nunique(dropna=True))
+        if _is_categorical_series(series):
+            categorical_columns.append(name)
+            if n_unique >= _HIGH_CARDINALITY_UNIQUE:
+                high_cardinality_columns.append(name)
+        elif _is_high_cardinality_id(series):
+            # ZIP / product-id style ints: categorical for grid choice.
+            categorical_columns.append(name)
             high_cardinality_columns.append(name)
 
     return {

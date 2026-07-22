@@ -89,3 +89,17 @@ def test_recommend_warns_on_extreme_missingness() -> None:
     assert result["recommended_grid"] == "default"
     assert result["metrics"]["overall_missing_pct"] > 50
     assert any("50%" in w for w in result["warnings"])
+
+def test_recommend_marketing_for_integer_high_cardinality_ids() -> None:
+    """ZIP-style integer IDs should still trigger the marketing grid."""
+    df = pd.DataFrame(
+        {
+            "zip_code": list(range(10000, 10080)),
+            "spend": list(range(80)),
+        }
+    )
+    df.loc[0, "spend"] = np.nan
+    result = recommend_grid_for_dataframe(df)
+    assert result["recommended_grid"] == "marketing"
+    assert "zip_code" in result["metrics"]["high_cardinality_columns"]
+

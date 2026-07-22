@@ -16,6 +16,24 @@ from phil.imputation import ImputationConfig, MaskedIterativeImputer
 from phil.magic import Magic
 import phil.magic as METHODS
 
+# Methods that are already imputers — do not wrap again in IterativeImputer.
+_STANDALONE_IMPUTERS = {
+    "SimpleImputer",
+    "KNNImputer",
+    "IterativeImputer",
+    "MaskedIterativeImputer",
+}
+
+# String estimator names used in gallery ParameterGrids for IterativeImputer.
+_NAMED_ESTIMATORS = {
+    "BayesianRidge": ("sklearn.linear_model", "BayesianRidge"),
+    "RandomForestRegressor": ("sklearn.ensemble", "RandomForestRegressor"),
+    "ExtraTreesRegressor": ("sklearn.ensemble", "ExtraTreesRegressor"),
+    "GradientBoostingRegressor": ("sklearn.ensemble", "GradientBoostingRegressor"),
+    "DecisionTreeRegressor": ("sklearn.tree", "DecisionTreeRegressor"),
+    "KNeighborsRegressor": ("sklearn.neighbors", "KNeighborsRegressor"),
+}
+
 
 class Phil:
     def __init__(
@@ -77,6 +95,7 @@ class Phil:
                     for k, v in param_vals.items()
                     if k in model.__init__.__code__.co_varnames
                 }
+                compatible_params = self._resolve_estimator_params(compatible_params)
 
                 if (
                     domain_knowledge
@@ -90,10 +109,26 @@ class Phil:
                 estimator = model(**compatible_params)
                 imputers.append(
                     self._build_pipeline(
-                        preprocessor, estimator, max_iter, domain_knowledge
+                        preprocessor,
+                        estimator,
+                        max_iter,
+                        domain_knowledge,
+                        method=method,
                     )
                 )
         return imputers
+
+    @classmethod
+    def _resolve_estimator_params(cls, params: dict) -> dict:
+        """Materialize string estimator names used by gallery grids."""
+        resolved = dict(params)
+        est = resolved.get("estimator")
+        if isinstance(est, str):
+            if est not in _NAMED_ESTIMATORS:
+                raise ValueError(f"Unknown estimator name in grid: {est!r}")
+            module_name, class_name = _NAMED_ESTIMATORS[est]
+            resolved["estimator"] = cls._import_model(module_name, class_name)()
+        return resolved
 
     @staticmethod
     def _import_model(module: str, method: str):
@@ -106,7 +141,25 @@ class Phil:
         estimator,
         max_iter: int,
         domain_knowledge=None,
+        method: str | None = None,
     ) -> Pipeline:
+
+        # Gallery domain grids list sklearn imputers as methods. Use them
+        # directly instead of wrapping again inside IterativeImputer.
+        if method in _STANDALONE_IMPUTERS:
+            imputer = estimator
+            if hasattr(imputer, "set_params"):
+                # Prefer Phil's random_state when the imputer supports it.
+                try:
+                    imputer.set_params(random_state=self.random_state)
+                except ValueError:
+                    pass
+            return Pipeline(
+                [
+                    ("preprocessor", preprocessor),
+                    ("imputer", imputer),
+                ]
+            )
 
         if domain_knowledge and domain_knowledge.covariate_subsets:
             mapped_subsets = {}
