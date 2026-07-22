@@ -116,6 +116,7 @@ def test_recommend_marketing_for_integer_high_cardinality_ids() -> None:
     assert "zip_code" in result["metrics"]["high_cardinality_columns"]
     assert result["sample_budget"]["literature_notes"]
 
+
 def test_recommend_marketing_for_nullable_integer_ids() -> None:
     """Nullable Int64 IDs with NA still count as high-cardinality categoricals."""
     df = pd.DataFrame(

@@ -69,9 +69,7 @@ GRID_METADATA: dict[str, GridMetadata] = {
     "finance": GridMetadata(
         name="finance",
         target_domain="finance",
-        intent=(
-            "Iterative + KNN + Simple imputers tuned for tabular financial data."
-        ),
+        intent=("Iterative + KNN + Simple imputers tuned for tabular financial data."),
         suitability=(
             "Use for asset/returns-style tables with outliers and correlated "
             "continuous metrics (pairs well with RobustScaler preprocessing)."
@@ -184,9 +182,7 @@ def render_imputation_matrix() -> str:
     lines.append("")
     lines.append("## Estimator / complexity notes")
     lines.append("")
-    lines.append(
-        "| Grid | Methods (summary) | Big-O / cost notes |"
-    )
+    lines.append("| Grid | Methods (summary) | Big-O / cost notes |")
     lines.append("| --- | --- | --- |")
     lines.append(
         "| `default` | BayesianRidge, trees, forests, GBM | "
@@ -196,22 +192,12 @@ def render_imputation_matrix() -> str:
         "| `sampling` | DistributionImputer (many seeds) | "
         "Linear in N · seeds; Medium |"
     )
+    lines.append("| `finance` | Iterative + KNN + Simple | KNN ~O(N²); High |")
+    lines.append("| `healthcare` | KNN + Simple + Iterative | KNN ~O(N²); High |")
     lines.append(
-        "| `finance` | Iterative + KNN + Simple | "
-        "KNN ~O(N²); High |"
+        "| `marketing` | Simple + KNN + Iterative | Lighter KNN grids; Medium |"
     )
-    lines.append(
-        "| `healthcare` | KNN + Simple + Iterative | "
-        "KNN ~O(N²); High |"
-    )
-    lines.append(
-        "| `marketing` | Simple + KNN + Iterative | "
-        "Lighter KNN grids; Medium |"
-    )
-    lines.append(
-        "| `engineering` | Simple + KNN + Iterative | "
-        "Modest KNN; Medium |"
-    )
+    lines.append("| `engineering` | Simple + KNN + Iterative | Modest KNN; Medium |")
     lines.append("")
     return "\n".join(lines)
 
@@ -409,4 +395,3 @@ class MagicGallery:
                 seed=42,
             )
         raise ValueError(f"Unknown magic method: {method}")
-

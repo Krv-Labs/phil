@@ -655,5 +655,3 @@ def list_builtin_grids() -> list[dict[str, Any]]:
             )
         payload.append(entry)
     return payload
-
-

@@ -156,4 +156,3 @@ def test_list_builtin_grids_healthcare_metadata() -> None:
     healthcare = next(g for g in grids if g["name"] == "healthcare")
     assert healthcare["time_complexity"] == "High"
     assert "KNN" in healthcare["scale_limits"] or "100" in healthcare["scale_limits"]
-

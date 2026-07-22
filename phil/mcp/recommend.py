@@ -45,9 +45,7 @@ def _frame_metrics(df: pd.DataFrame) -> dict[str, Any]:
     n_cols = int(df.shape[1])
     total_missing = int(df.isna().sum().sum())
     overall_missing_pct = (
-        round(total_missing / (n_rows * n_cols) * 100, 3)
-        if n_rows and n_cols
-        else 0.0
+        round(total_missing / (n_rows * n_cols) * 100, 3) if n_rows and n_cols else 0.0
     )
 
     categorical_columns: list[str] = []

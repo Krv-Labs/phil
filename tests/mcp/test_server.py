@@ -121,11 +121,10 @@ async def test_imputation_matrix_resource() -> None:
         uris = {str(r.uri) for r in resources}
         assert "phil://docs/imputation-matrix" in uris
         contents = await client.read_resource("phil://docs/imputation-matrix")
-        text = "".join(
-            getattr(part, "text", "") or "" for part in contents
-        )
+        text = "".join(getattr(part, "text", "") or "" for part in contents)
         assert "Phil Imputation Grid Matrix" in text
         assert "`healthcare`" in text
+
 
 @pytest.mark.asyncio
 async def test_end_to_end_csv_sweep(
@@ -348,4 +347,3 @@ imputation:
         )
         assert run["status"] == "error"
         assert run["error_code"] == "UNSUPPORTED_STRING_COLUMNS"
-
