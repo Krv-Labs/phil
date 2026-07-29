@@ -3,20 +3,24 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 import pandas as pd
 
-from phil.gallery import GRID_METADATA, GridGallery, get_grid_metadata
+from phil.gallery import GRID_METADATA, get_grid_metadata, grid_scalability
 
 _HIGH_CARDINALITY_UNIQUE = 50
 _LARGE_N_ROWS = 100_000
 _EXTREME_MISSING_PCT = 50.0
 
-# Classical MI: a small m often suffices for point-estimate efficiency (Rubin).
+# Floor for Phil.samples when missingness is low.
 _M_EFFICIENCY_FLOOR = 5
-# Practical ceiling before Phil sweeps become an expensive multiverse.
-_M_STABILITY_CAP = 40
+# Matches the highest non-KNN scalability_cap below.
+_M_STABILITY_CAP = 30
+
+# Integer columns only count as IDs when the name looks ID-like.
+_ID_NAME_RE = re.compile(r"(?i)(^id$|_id$|^zip(_|$)|_code$|^code$)")
 
 
 def _is_categorical_series(series: pd.Series) -> bool:
@@ -27,17 +31,17 @@ def _is_categorical_series(series: pd.Series) -> bool:
     )
 
 
-def _is_high_cardinality_id(series: pd.Series) -> bool:
-    """Integer ID columns with many distinct values (ZIP, product_id, …).
+def _is_high_cardinality_id(series: pd.Series, *, name: str, n_unique: int) -> bool:
+    """Integer ID columns (ZIP, product_id, …), not ordinary measurements.
 
-    Only integer / nullable-integer dtypes qualify. Integral *floats*
-    (lab values like glucose after CSV+NA promotion) are measurements,
-    not categoricals — do not route them to ``marketing``.
-    Prefer pandas ``Int64`` for ID columns that may contain NA.
+    Requires an ID-like column name plus high cardinality. Raw uniqueness
+    alone misroutes ``salary`` / ``age``-style integer measurements.
     """
     if not pd.api.types.is_integer_dtype(series):
         return False
-    return int(series.nunique(dropna=True)) >= _HIGH_CARDINALITY_UNIQUE
+    if n_unique < _HIGH_CARDINALITY_UNIQUE:
+        return False
+    return bool(_ID_NAME_RE.search(name))
 
 
 def _frame_metrics(df: pd.DataFrame) -> dict[str, Any]:
@@ -47,6 +51,13 @@ def _frame_metrics(df: pd.DataFrame) -> dict[str, Any]:
     overall_missing_pct = (
         round(total_missing / (n_rows * n_cols) * 100, 3) if n_rows and n_cols else 0.0
     )
+    if n_rows and n_cols:
+        col_missing_pct = df.isna().mean() * 100.0
+        max_col_missing_pct = float(round(col_missing_pct.max(), 3))
+        n_sparse_cols = int((col_missing_pct > _EXTREME_MISSING_PCT).sum())
+    else:
+        max_col_missing_pct = 0.0
+        n_sparse_cols = 0
 
     categorical_columns: list[str] = []
     high_cardinality_columns: list[str] = []
@@ -58,8 +69,7 @@ def _frame_metrics(df: pd.DataFrame) -> dict[str, Any]:
             categorical_columns.append(name)
             if n_unique >= _HIGH_CARDINALITY_UNIQUE:
                 high_cardinality_columns.append(name)
-        elif _is_high_cardinality_id(series):
-            # ZIP / product-id style ints: categorical for grid choice.
+        elif _is_high_cardinality_id(series, name=name, n_unique=n_unique):
             categorical_columns.append(name)
             high_cardinality_columns.append(name)
 
@@ -68,12 +78,12 @@ def _frame_metrics(df: pd.DataFrame) -> dict[str, Any]:
         "n_cols": n_cols,
         "total_missing": total_missing,
         "overall_missing_pct": overall_missing_pct,
+        "max_col_missing_pct": max_col_missing_pct,
+        "n_sparse_cols": n_sparse_cols,
         "n_categorical": len(categorical_columns),
         "categorical_columns": categorical_columns,
         "high_cardinality_columns": high_cardinality_columns,
         "has_high_cardinality": bool(high_cardinality_columns),
-        # Proxy for Rubin's fraction of missing information (γ) when FMI
-        # is unavailable: overall cell-missing rate.
         "fmi_proxy": round(overall_missing_pct / 100.0, 4),
     }
 
@@ -82,77 +92,26 @@ def _metadata_fields(grid_name: str) -> dict[str, Any]:
     meta = get_grid_metadata(grid_name)
     if meta is None:
         return {"name": grid_name}
-    return {
-        "name": meta.name,
-        "target_domain": meta.target_domain,
-        "intent": meta.intent,
-        "suitability": meta.suitability,
-        "data_type_affinity": list(meta.data_type_affinity),
-        "time_complexity": meta.time_complexity,
-        "scale_limits": meta.scale_limits,
-    }
+    return meta.to_dict()
 
 
-def _grid_scalability(grid_name: str) -> dict[str, Any]:
-    """Expose candidate count / KNN risk so agents can budget compute."""
-    grid = GridGallery.get(grid_name)
-    methods = list(grid.methods)
-    n_candidates = sum(len(list(param_grid)) for param_grid in grid.grids)
-    has_knn = any("KNN" in method for method in methods)
-    has_iterative = any("Iterative" in method for method in methods)
-    has_tree_ensemble = any(
-        method
-        in {
-            "RandomForestRegressor",
-            "GradientBoostingRegressor",
-            "ExtraTreesRegressor",
-        }
-        for method in methods
-    )
-    if has_knn:
-        big_o = "O(N^2) neighbor search dominates when KNN is in the grid"
-        cost_tier = "high" if n_candidates >= 7 else "medium_high"
-    elif has_tree_ensemble:
-        big_o = "O(N log N · trees) per iterative/ensemble fit"
-        cost_tier = "medium"
-    elif has_iterative:
-        big_o = "O(N · P · iters) chained / iterative updates"
-        cost_tier = "medium"
-    else:
-        big_o = "Near-linear in N for simple / distributional imputers"
-        cost_tier = "low"
-
-    return {
-        "grid_candidate_count": n_candidates,
-        "methods": methods,
-        "has_knn": has_knn,
-        "has_iterative": has_iterative,
-        "has_tree_ensemble": has_tree_ensemble,
-        "cost_tier": cost_tier,
-        "complexity_note": big_o,
-    }
-
-
-def _literature_sample_budget(
+def _sample_budget(
     *,
     n_rows: int,
     missing_pct: float,
     has_knn: bool,
     grid_name: str,
 ) -> dict[str, Any]:
-    """Map MI literature onto Phil's ensemble ``samples`` knob.
+    """Heuristic Phil ``samples`` budget from missingness and grid cost.
 
-    Anchors:
-    - Rubin: small m (≈3–10) often enough for point-estimate efficiency.
-    - White / Bodner / von Hippel: larger m as FMI grows if you care about
-      stable SEs; a common practical rule is m on the order of % missing.
-    - Phil ``samples`` covers a multiverse of candidates (not Rubin's rules
-      pooling), so we still raise m with missingness, then cap by scalability
-      (large N, KNN).
+    Phil ``samples`` is multiverse coverage of the candidate grid, not Rubin's
+    multiple-imputation *m*. We still raise the budget with cell-missing rate,
+    then cap by scalability (large N, KNN, sampling gallery).
     """
     fmi_proxy = missing_pct / 100.0
-    m_stability = max(_M_EFFICIENCY_FLOOR, int(math.ceil(100 * fmi_proxy)))
-    m_stability = min(m_stability, _M_STABILITY_CAP)
+    m_from_missing = max(_M_EFFICIENCY_FLOOR, int(math.ceil(100 * fmi_proxy)))
+    m_stability_uncapped = m_from_missing
+    m_stability = min(m_from_missing, _M_STABILITY_CAP)
 
     if n_rows > _LARGE_N_ROWS:
         scalability_cap = 8 if has_knn else 12
@@ -171,18 +130,15 @@ def _literature_sample_budget(
     return {
         "fmi_proxy": round(fmi_proxy, 4),
         "m_efficiency_floor": _M_EFFICIENCY_FLOOR,
-        "m_stability_uncapped": min(
-            max(_M_EFFICIENCY_FLOOR, int(math.ceil(100 * fmi_proxy))),
-            _M_STABILITY_CAP,
-        ),
+        "m_stability_uncapped": m_stability_uncapped,
         "scalability_cap": scalability_cap,
         "suggested_samples": suggested,
         "literature_notes": [
-            "Rubin MI: m≈5 often enough for point-estimate efficiency.",
-            "White/Bodner/von Hippel: increase m with FMI for stable SEs; "
-            "practical rule m ≈ percent missing (capped).",
-            "Phil samples ≈ multiverse coverage of the candidate grid; "
-            "cap further when N is large or KNN is present.",
+            "Heuristic: start near 5 samples when missingness is low.",
+            "Raise samples roughly with overall % missing, then cap for "
+            "runtime (large N, KNN, or the sampling gallery).",
+            "Phil samples ≈ multiverse coverage of the candidate grid, "
+            "not classical MI pooling size m.",
         ],
     }
 
@@ -219,7 +175,7 @@ def _scalable_alternatives(recommended: str, n_rows: int) -> list[dict[str, Any]
     for name in alts:
         if name == recommended or name not in GRID_METADATA:
             continue
-        scale = _grid_scalability(name)
+        scale = grid_scalability(name)
         meta = _metadata_fields(name)
         out.append(
             {
@@ -241,6 +197,7 @@ def recommend_grid_for_dataframe(df: pd.DataFrame) -> dict[str, Any]:
 
     n_rows = metrics["n_rows"]
     overall_missing_pct = metrics["overall_missing_pct"]
+    max_col_missing_pct = metrics["max_col_missing_pct"]
     n_categorical = metrics["n_categorical"]
     has_high_cardinality = metrics["has_high_cardinality"]
 
@@ -270,18 +227,13 @@ def recommend_grid_for_dataframe(df: pd.DataFrame) -> dict[str, Any]:
             "High-cardinality categorical columns detected "
             f"({', '.join(metrics['high_cardinality_columns'][:5])}"
             f"{'…' if len(metrics['high_cardinality_columns']) > 5 else ''}); "
-            "`marketing` pairs with TargetEncoder-friendly preprocessing."
+            "`marketing` targets high-cardinality / mixed consumer tables."
         )
-    elif overall_missing_pct > _EXTREME_MISSING_PCT:
+    elif max_col_missing_pct > _EXTREME_MISSING_PCT:
         recommended = "default"
-        warnings.append(
-            "Overall missingness > 50%: tree-based / iterative regressors may "
-            "struggle to converge; monitor diagnose_sweep spread and consider "
-            "dropping ultra-sparse columns."
-        )
         rationale.append(
-            f"Extreme missingness ({overall_missing_pct}%); start with "
-            "`default` and raise samples with FMI (literature-guided)."
+            f"Extreme per-column missingness (max {max_col_missing_pct}%); "
+            "start with `default` and raise samples with missingness."
         )
     else:
         recommended = "default"
@@ -290,11 +242,23 @@ def recommend_grid_for_dataframe(df: pd.DataFrame) -> dict[str, Any]:
             "`default` is the general-purpose starting grid."
         )
 
+    # Warnings accumulate independently of which branch picked the grid.
+    if (
+        max_col_missing_pct > _EXTREME_MISSING_PCT
+        or metrics["n_sparse_cols"] > 0
+        or overall_missing_pct > _EXTREME_MISSING_PCT
+    ):
+        warnings.append(
+            "Column(s) with >50% missing: tree-based / iterative regressors may "
+            "struggle to converge; monitor diagnose_sweep spread and consider "
+            "dropping ultra-sparse columns."
+        )
+
     if recommended not in GRID_METADATA:
         recommended = "default"
 
-    scalability = _grid_scalability(recommended)
-    sample_budget = _literature_sample_budget(
+    scalability = grid_scalability(recommended)
+    sample_budget = _sample_budget(
         n_rows=n_rows,
         missing_pct=overall_missing_pct,
         has_knn=bool(scalability["has_knn"]),
@@ -311,8 +275,8 @@ def recommend_grid_for_dataframe(df: pd.DataFrame) -> dict[str, Any]:
         )
 
     rationale.append(
-        "Sample budget from MI literature (efficiency floor m≈5; raise with "
-        f"FMI proxy={sample_budget['fmi_proxy']}) then cap for scalability "
+        "Sample budget heuristic (floor≈5; raise with missingness proxy="
+        f"{sample_budget['fmi_proxy']}) then cap for scalability "
         f"(cap={sample_budget['scalability_cap']})."
     )
 

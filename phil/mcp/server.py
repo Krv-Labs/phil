@@ -828,8 +828,6 @@ async def recommend_grid(
         return unknown_handle_error("recommend_grid", "dataset_id", dataset_id)
     except FileNotFoundError:
         return path_access_error("recommend_grid", data_path or dataset_id)
-    except ToolError as e:
-        return mcp_error("recommend_grid", str(e))
     except Exception as e:
         return mcp_error("recommend_grid", str(e))
 

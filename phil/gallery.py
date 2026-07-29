@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 from pydantic import BaseModel
@@ -21,7 +21,7 @@ class GridMetadata:
     target_domain: str
     intent: str
     suitability: str
-    data_type_affinity: List[str]
+    data_type_affinity: tuple[str, ...]
     time_complexity: str  # "Low" | "Medium" | "High"
     scale_limits: str
 
@@ -41,7 +41,7 @@ GRID_METADATA: dict[str, GridMetadata] = {
             "Good starting point for mixed continuous tabular data when no "
             "domain-specific prior applies."
         ),
-        data_type_affinity=["continuous", "mixed"],
+        data_type_affinity=("continuous", "mixed"),
         time_complexity="Medium",
         scale_limits=(
             "Comfortable under ~100k rows. Tree ensembles dominate cost; "
@@ -59,7 +59,7 @@ GRID_METADATA: dict[str, GridMetadata] = {
             "Prefer when the goal is to preserve marginal distributions "
             "rather than conditional structure (multiverse-style sampling)."
         ),
-        data_type_affinity=["continuous"],
+        data_type_affinity=("continuous",),
         time_complexity="Medium",
         scale_limits=(
             "Scales with sample count and seeds. Safer than KNN on large N; "
@@ -74,7 +74,7 @@ GRID_METADATA: dict[str, GridMetadata] = {
             "Use for asset/returns-style tables with outliers and correlated "
             "continuous metrics (pairs well with RobustScaler preprocessing)."
         ),
-        data_type_affinity=["continuous", "correlated"],
+        data_type_affinity=("continuous", "correlated"),
         time_complexity="High",
         scale_limits=(
             "KNN and iterative estimators dominate; keep rows <100k or reduce "
@@ -89,7 +89,7 @@ GRID_METADATA: dict[str, GridMetadata] = {
             "Required for medical metrics with non-Gaussian distributions "
             "(ordinal scaling + robust bounds)."
         ),
-        data_type_affinity=["continuous", "ordinal", "mixed"],
+        data_type_affinity=("continuous", "ordinal", "mixed"),
         time_complexity="High",
         scale_limits=(
             "Overhead scales quadratically O(N^2) due to KNN. Keep row count "
@@ -99,12 +99,15 @@ GRID_METADATA: dict[str, GridMetadata] = {
     "marketing": GridMetadata(
         name="marketing",
         target_domain="marketing",
-        intent="Categorical-friendly Simple, KNN, and Iterative imputers.",
+        intent=(
+            "SimpleImputer (most_frequent/mean/median), KNN, and Iterative "
+            "imputers for mixed consumer tables (post-encoding numeric matrix)."
+        ),
         suitability=(
             "Choose for consumer analytics with high-cardinality categoricals "
-            "(zip codes, product IDs); pairs with TargetEncoder preprocessing."
+            "(zip codes, product IDs)."
         ),
-        data_type_affinity=["categorical", "high-cardinality", "mixed"],
+        data_type_affinity=("categorical", "high-cardinality", "mixed"),
         time_complexity="Medium",
         scale_limits=(
             "KNN still present but lighter neighbor grids. Watch cardinality "
@@ -122,7 +125,7 @@ GRID_METADATA: dict[str, GridMetadata] = {
             "Prefer for sensor / industrial measurements where mean/median "
             "baselines plus modest KNN coverage are enough."
         ),
-        data_type_affinity=["continuous", "sensor"],
+        data_type_affinity=("continuous", "sensor"),
         time_complexity="Medium",
         scale_limits=(
             "Moderate KNN cost. Suitable under ~100k rows; lower samples if "
@@ -142,8 +145,55 @@ def list_grid_metadata() -> list[GridMetadata]:
     return [GRID_METADATA[name] for name in sorted(GRID_METADATA)]
 
 
+def grid_candidate_count(grid_name: str) -> int:
+    """Number of ParameterGrid candidates for a built-in gallery grid."""
+    grid = GridGallery.get(grid_name)
+    return sum(len(list(param_grid)) for param_grid in grid.grids)
+
+
+def grid_scalability(grid_name: str) -> dict[str, Any]:
+    """Expose candidate count / KNN risk so agents can budget compute."""
+    grid = GridGallery.get(grid_name)
+    methods = list(grid.methods)
+    n_candidates = sum(len(list(param_grid)) for param_grid in grid.grids)
+    has_knn = any("KNN" in method for method in methods)
+    has_iterative = any("Iterative" in method for method in methods)
+    has_tree_ensemble = any(
+        method
+        in {
+            "RandomForestRegressor",
+            "GradientBoostingRegressor",
+            "ExtraTreesRegressor",
+        }
+        for method in methods
+    )
+    if has_knn:
+        big_o = "O(N^2) neighbor search dominates when KNN is in the grid"
+        cost_tier = "high" if n_candidates >= 7 else "medium_high"
+    elif has_tree_ensemble:
+        big_o = "O(N log N · trees) per iterative/ensemble fit"
+        cost_tier = "medium"
+    elif has_iterative:
+        big_o = "O(N · P · iters) chained / iterative updates"
+        cost_tier = "medium"
+    else:
+        big_o = "Near-linear in N for simple / distributional imputers"
+        # sampling metadata says Medium; live cost is low without KNN/trees.
+        cost_tier = "low"
+
+    return {
+        "grid_candidate_count": n_candidates,
+        "methods": methods,
+        "has_knn": has_knn,
+        "has_iterative": has_iterative,
+        "has_tree_ensemble": has_tree_ensemble,
+        "cost_tier": cost_tier,
+        "complexity_note": big_o,
+    }
+
+
 def render_imputation_matrix() -> str:
-    """Compile a Markdown comparison matrix from ``GRID_METADATA``."""
+    """Compile a Markdown comparison matrix from `GRID_METADATA` + live grids."""
     headers = (
         "Grid",
         "Domain",
@@ -155,7 +205,7 @@ def render_imputation_matrix() -> str:
     lines = [
         "# Phil Imputation Grid Matrix",
         "",
-        "Compiled from declarative ``GRID_METADATA`` (single source of truth).",
+        "Compiled from declarative `GRID_METADATA` and live `GridGallery` configs.",
         "",
         "| " + " | ".join(headers) + " |",
         "| " + " | ".join("---" for _ in headers) + " |",
@@ -182,22 +232,13 @@ def render_imputation_matrix() -> str:
     lines.append("")
     lines.append("## Estimator / complexity notes")
     lines.append("")
-    lines.append("| Grid | Methods (summary) | Big-O / cost notes |")
-    lines.append("| --- | --- | --- |")
-    lines.append(
-        "| `default` | BayesianRidge, trees, forests, GBM | "
-        "Ensemble fits ~O(N log N · trees); Medium |"
-    )
-    lines.append(
-        "| `sampling` | DistributionImputer (many seeds) | "
-        "Linear in N · seeds; Medium |"
-    )
-    lines.append("| `finance` | Iterative + KNN + Simple | KNN ~O(N²); High |")
-    lines.append("| `healthcare` | KNN + Simple + Iterative | KNN ~O(N²); High |")
-    lines.append(
-        "| `marketing` | Simple + KNN + Iterative | Lighter KNN grids; Medium |"
-    )
-    lines.append("| `engineering` | Simple + KNN + Iterative | Modest KNN; Medium |")
+    lines.append("| Grid | Methods | Cost tier | Big-O / cost notes |")
+    lines.append("| --- | --- | --- | --- |")
+    for meta in list_grid_metadata():
+        scale = grid_scalability(meta.name)
+        methods = ", ".join(scale["methods"])
+        note = scale["complexity_note"].replace("|", "\\|")
+        lines.append(f"| `{meta.name}` | {methods} | {scale['cost_tier']} | {note} |")
     lines.append("")
     return "\n".join(lines)
 
@@ -374,7 +415,7 @@ class ProcessingGallery:
     }
 
     @classmethod
-    def get(cls, name: str = "default") -> Dict[str, PreprocessingConfig]:
+    def get(cls, name: str = "default") -> dict[str, PreprocessingConfig]:
         return {
             "num": cls._numeric_methods.get(name, cls._numeric_methods["default"]),
             "cat": cls._categorical_methods.get(

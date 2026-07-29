@@ -115,6 +115,33 @@ async def test_recommend_grid_after_ingest(csv_path: str) -> None:
 
 
 @pytest.mark.asyncio
+async def test_recommend_grid_unknown_dataset_id() -> None:
+    async with Client(mcp) as client:
+        result = _payload(
+            await client.call_tool(
+                "recommend_grid", {"dataset_id": "ds_does_not_exist"}
+            )
+        )
+        assert result.get("status") == "error" or "error" in result
+        blob = json.dumps(result)
+        assert "DATASET_ID_UNKNOWN" in blob or "Unknown dataset_id" in blob
+
+
+@pytest.mark.asyncio
+async def test_recommend_grid_bad_data_path() -> None:
+    async with Client(mcp) as client:
+        result = _payload(
+            await client.call_tool(
+                "recommend_grid",
+                {"data_path": "/tmp/phil_definitely_missing_12345.csv"},
+            )
+        )
+        assert result.get("status") == "error" or "error" in result
+        blob = json.dumps(result)
+        assert "FILE_NOT_FOUND" in blob or "not exist" in blob.lower()
+
+
+@pytest.mark.asyncio
 async def test_imputation_matrix_resource() -> None:
     async with Client(mcp) as client:
         resources = await client.list_resources()

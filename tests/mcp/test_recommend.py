@@ -5,16 +5,32 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from phil.gallery import GRID_METADATA, render_imputation_matrix
+from phil.gallery import (
+    GRID_METADATA,
+    GridGallery,
+    grid_candidate_count,
+    render_imputation_matrix,
+)
 from phil.mcp.recommend import recommend_grid_for_dataframe
+
+
+def test_grid_metadata_parity_with_gallery() -> None:
+    # Agent-facing metadata must not reference missing gallery keys
+    # (GridGallery.get silently falls back to default).
+    assert set(GRID_METADATA).issubset(set(GridGallery._grids))
 
 
 def test_render_imputation_matrix_includes_all_grids() -> None:
     md = render_imputation_matrix()
     assert md.startswith("# Phil Imputation Grid Matrix")
     assert "| Grid | Domain | Complexity |" in md
+    assert "## Estimator / complexity notes" in md
+    assert "cost_tier" not in md  # header uses human label
+    assert "| Cost tier |" in md
     for name in GRID_METADATA:
         assert f"`{name}`" in md
+        # Live scalability rows include each grid method list.
+        assert grid_candidate_count(name) >= 1
 
 
 def test_recommend_default_for_small_mixed_frame() -> None:
@@ -29,7 +45,9 @@ def test_recommend_default_for_small_mixed_frame() -> None:
     assert result["recommended_grid"] == "default"
     # 2/8 cells missing → FMI proxy 0.25 → m≈25, no KNN cap 30
     assert result["suggested_samples"] == 25
-    assert result["scalability"]["grid_candidate_count"] == 17
+    assert result["scalability"]["grid_candidate_count"] == grid_candidate_count(
+        "default"
+    )
     assert result["sample_budget"]["m_efficiency_floor"] == 5
     assert "Recommended Grid: default" in result["recommendation"]
     assert result["grid"]["name"] == "default"
@@ -85,6 +103,7 @@ def test_recommend_marketing_for_high_cardinality() -> None:
     assert result["scalability"]["has_knn"] is True
     assert "zip" in result["metrics"]["high_cardinality_columns"]
     assert any(a["grid"] == "default" for a in result["scalable_alternatives"])
+    assert "TargetEncoder" not in " ".join(result["rationale"])
 
 
 def test_recommend_warns_on_extreme_missingness() -> None:
@@ -97,8 +116,9 @@ def test_recommend_warns_on_extreme_missingness() -> None:
     result = recommend_grid_for_dataframe(df)
     assert result["recommended_grid"] == "default"
     assert result["metrics"]["overall_missing_pct"] > 50
-    # 75% missing → m_stability 40, no-KNN cap 30 → 30
+    # 75% missing → m_from_missing 75, stability cap 30 → 30
     assert result["suggested_samples"] == 30
+    assert result["sample_budget"]["m_stability_uncapped"] == 75
     assert any("50%" in w for w in result["warnings"])
 
 
@@ -115,6 +135,9 @@ def test_recommend_marketing_for_integer_high_cardinality_ids() -> None:
     assert result["recommended_grid"] == "marketing"
     assert "zip_code" in result["metrics"]["high_cardinality_columns"]
     assert result["sample_budget"]["literature_notes"]
+    assert not any(
+        "Rubin" in note for note in result["sample_budget"]["literature_notes"]
+    )
 
 
 def test_recommend_marketing_for_nullable_integer_ids() -> None:
@@ -144,3 +167,47 @@ def test_recommend_default_for_integral_float_lab_values() -> None:
     result = recommend_grid_for_dataframe(df)
     assert result["recommended_grid"] == "default"
     assert "glucose" not in result["metrics"]["high_cardinality_columns"]
+
+
+def test_recommend_default_for_integer_measurements_without_nas() -> None:
+    """Ordinary integer measurements must not route to marketing."""
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame(
+        {
+            "age": np.arange(200) % 80,
+            "salary": np.arange(200) * 100,
+            "x": rng.normal(size=200),
+        }
+    )
+    df.loc[0, "x"] = np.nan
+    result = recommend_grid_for_dataframe(df)
+    assert result["recommended_grid"] == "default"
+    assert "age" not in result["metrics"]["high_cardinality_columns"]
+    assert "salary" not in result["metrics"]["high_cardinality_columns"]
+
+
+def test_recommend_warns_when_high_cardinality_and_extreme_missing() -> None:
+    df = pd.DataFrame(
+        {
+            "zip": [f"z{i}" for i in range(60)],
+            "sparse": [np.nan] * 55 + [1.0] * 5,
+        }
+    )
+    result = recommend_grid_for_dataframe(df)
+    assert result["recommended_grid"] == "marketing"
+    assert any("50%" in w for w in result["warnings"])
+    assert result["metrics"]["max_col_missing_pct"] > 50
+
+
+def test_recommend_single_column_and_empty_frames() -> None:
+    empty = recommend_grid_for_dataframe(pd.DataFrame())
+    assert empty["recommended_grid"] == "default"
+    assert empty["metrics"]["n_rows"] == 0
+
+    single = recommend_grid_for_dataframe(pd.DataFrame({"a": [1.0, np.nan, 3.0, 4.0]}))
+    assert single["recommended_grid"] == "default"
+    assert single["metrics"]["n_cols"] == 1
+
+
+def test_marketing_candidate_count() -> None:
+    assert grid_candidate_count("marketing") == 8
