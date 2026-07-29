@@ -138,17 +138,20 @@ def validate_config_yaml(
 
     try:
         raw = parse_yaml_mapping(config_yaml)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         error_code = "YAML_NOT_RAW" if "raw YAML" in str(exc) else "CONFIG_YAML_INVALID"
+        agent_action = (
+            "Pass raw YAML only. Do not wrap config_yaml in Markdown fences."
+            if error_code == "YAML_NOT_RAW"
+            else "Pass a YAML mapping (key/value document), not a bare scalar or list."
+        )
         return ValidationReport(
             ok=False,
             normalized_yaml=None,
             resolved_dataset_path=dataset_path,
             issues=[ValidationIssue(path="$", message=str(exc))],
             error_code=error_code,
-            agent_action=(
-                "Pass raw YAML only. Do not wrap config_yaml in Markdown fences."
-            ),
+            agent_action=agent_action,
         )
 
     _validate_known_sections(raw, issues)

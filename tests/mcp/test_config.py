@@ -40,6 +40,15 @@ def test_fenced_markdown_yaml_rejected() -> None:
     assert report.error_code == "YAML_NOT_RAW"
 
 
+def test_non_mapping_yaml_rejected() -> None:
+    report = validate_config_yaml("123")
+    assert not report.ok
+    assert report.error_code == "CONFIG_YAML_INVALID"
+    assert any("mapping" in issue.message.lower() for issue in report.issues)
+    assert report.agent_action is not None
+    assert "mapping" in report.agent_action.lower()
+
+
 def test_unknown_grid_rejected() -> None:
     config_yaml = "imputation:\n  grid: bogus\n"
     report = validate_config_yaml(config_yaml)
