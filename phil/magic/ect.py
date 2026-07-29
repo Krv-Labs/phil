@@ -2,8 +2,6 @@
 Euler Characteristic Transform implementation backed by Rust.
 """
 
-from typing import List
-
 import numpy as np
 
 from . import rust_backend
@@ -23,14 +21,14 @@ class ECT(Magic):
             else:
                 raise ValueError(f"Invalid configuration key: {key}")
 
-    def generate(self, X: List[np.ndarray]) -> List[np.ndarray]:
+    def generate(self, X: list[np.ndarray]) -> list[np.ndarray]:
         if not isinstance(X, list):
-            raise ValueError("Input must be a list of numpy arrays")
+            raise TypeError("Input must be a list of numpy arrays")
         if not X or any(x.size == 0 for x in X):
             raise ValueError("Input cannot be empty")
 
         scale = float(self.scale)
-        descriptors: List[np.ndarray] = []
+        descriptors: list[np.ndarray] = []
         for sample in X:
             if np.ndim(sample) != 2:
                 raise ValueError("Each sample must be a 2D numpy array")

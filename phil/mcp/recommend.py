@@ -45,7 +45,7 @@ def _is_high_cardinality_id(series: pd.Series, *, name: str, n_unique: int) -> b
 
 
 def _frame_metrics(df: pd.DataFrame) -> dict[str, Any]:
-    n_rows = int(len(df))
+    n_rows = len(df)
     n_cols = int(df.shape[1])
     total_missing = int(df.isna().sum().sum())
     overall_missing_pct = (
@@ -109,7 +109,7 @@ def _sample_budget(
     then cap by scalability (large N, KNN, sampling gallery).
     """
     fmi_proxy = missing_pct / 100.0
-    m_from_missing = max(_M_EFFICIENCY_FLOOR, int(math.ceil(100 * fmi_proxy)))
+    m_from_missing = max(_M_EFFICIENCY_FLOOR, math.ceil(100 * fmi_proxy))
     m_stability_uncapped = m_from_missing
     m_stability = min(m_from_missing, _M_STABILITY_CAP)
 
@@ -135,10 +135,14 @@ def _sample_budget(
         "suggested_samples": suggested,
         "literature_notes": [
             "Heuristic: start near 5 samples when missingness is low.",
-            "Raise samples roughly with overall % missing, then cap for "
-            "runtime (large N, KNN, or the sampling gallery).",
-            "Phil samples ≈ multiverse coverage of the candidate grid, "
-            "not classical MI pooling size m.",
+            (
+                "Raise samples roughly with overall % missing, then cap for "
+                "runtime (large N, KNN, or the sampling gallery)."
+            ),
+            (
+                "Phil samples ≈ multiverse coverage of the candidate grid, "
+                "not classical MI pooling size m."
+            ),
         ],
     }
 
@@ -150,7 +154,7 @@ def _subsample_advice(n_rows: int, has_knn: bool) -> dict[str, Any] | None:
     target = min(target, n_rows)
     return {
         "recommended": n_rows > target,
-        "suggested_rows": target if n_rows > target else n_rows,
+        "suggested_rows": min(n_rows, target),
         "reason": (
             "Subsample rows before KNN/iterative sweeps on large N; "
             "fit on the subset, then optionally refit the chosen method."

@@ -8,7 +8,6 @@ the opinionated workflow do not pay for it on every session.
 
 from __future__ import annotations
 
-
 WORKFLOW_PROMPT = """\
 # Phil Imputation Sweep Workflow
 

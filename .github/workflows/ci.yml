@@ -28,13 +28,11 @@ jobs:
 
       - name: Lint with Ruff
         run: |
-          # Pin to the lockfile version — unpinned uvx pulls latest and can
-          # fail the tree on rule-set churn (e.g. ruff 0.16).
-          uvx ruff@0.15.8 check phil/
+          uvx ruff check phil/
 
       - name: Check code formatting with Ruff
         run: |
-          uvx ruff@0.15.8 format --check phil/
+          uvx ruff format --check phil/
 
   test:
     runs-on: ubuntu-latest
@@ -69,4 +67,5 @@ jobs:
       - name: Test summary
         run: |
           echo "✅ All tests passed for Python ${{ matrix.python-version }}"
+
 

@@ -19,7 +19,6 @@ from phil.gallery import GRID_METADATA, GridGallery
 from phil.imputation import ImputationConfig
 from phil.magic import ECTConfig
 
-
 # Derived from gallery.GRID_METADATA so MCP blurbs cannot drift from the
 # declarative metadata source of truth.
 GRID_INTENTS: dict[str, str] = {
@@ -90,7 +89,7 @@ def parse_yaml_mapping(config_yaml: str) -> dict[str, Any]:
         )
     parsed = yaml.safe_load(config_yaml)
     if not isinstance(parsed, dict):
-        raise ValueError("config_yaml must be a valid YAML mapping")
+        raise TypeError("config_yaml must be a valid YAML mapping")
     return parsed
 
 
@@ -313,27 +312,34 @@ def _validate_imputation(section: Any, issues: list[ValidationIssue]) -> None:
                     )
 
     for int_key in ("samples", "random_state", "max_iter"):
-        if int_key in section and section[int_key] is not None:
-            if not isinstance(section[int_key], int) or isinstance(
-                section[int_key], bool
-            ):
-                issues.append(
-                    ValidationIssue(
-                        path=f"$.imputation.{int_key}",
-                        message=f"'{int_key}' must be an integer.",
-                        received=section[int_key],
-                    )
-                )
-
-    if "samples" in section and isinstance(section["samples"], int):
-        if section["samples"] <= 0:
+        if (
+            int_key in section
+            and section[int_key] is not None
+            and (
+                not isinstance(section[int_key], int)
+                or isinstance(section[int_key], bool)
+            )
+        ):
             issues.append(
                 ValidationIssue(
-                    path="$.imputation.samples",
-                    message="'samples' must be > 0.",
-                    received=section["samples"],
+                    path=f"$.imputation.{int_key}",
+                    message=f"'{int_key}' must be an integer.",
+                    received=section[int_key],
                 )
             )
+
+    if (
+        "samples" in section
+        and isinstance(section["samples"], int)
+        and section["samples"] <= 0
+    ):
+        issues.append(
+            ValidationIssue(
+                path="$.imputation.samples",
+                message="'samples' must be > 0.",
+                received=section["samples"],
+            )
+        )
 
     if "drop_cols" in section and section["drop_cols"] is not None:
         drop_cols = section["drop_cols"]

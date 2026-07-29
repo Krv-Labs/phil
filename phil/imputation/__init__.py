@@ -11,6 +11,6 @@ __all__ = [
     "CovariateDistributionImputer",
     "DistributionImputer",
     "ImputationConfig",
-    "PreprocessingConfig",
     "MaskedIterativeImputer",
+    "PreprocessingConfig",
 ]

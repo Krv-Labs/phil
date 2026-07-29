@@ -1,6 +1,6 @@
 import importlib
 import warnings
-from typing import Any, List, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -11,10 +11,10 @@ from sklearn.experimental import enable_iterative_imputer  # noqa: F401
 from sklearn.impute import IterativeImputer
 from sklearn.pipeline import Pipeline
 
+import phil.magic as METHODS
 from phil.gallery import GridGallery, MagicGallery, ProcessingGallery
 from phil.imputation import ImputationConfig, MaskedIterativeImputer
 from phil.magic import Magic
-import phil.magic as METHODS
 
 # Methods that are already imputers — do not wrap again in IterativeImputer.
 _STANDALONE_IMPUTERS = {
@@ -53,7 +53,7 @@ class Phil:
         self.representations = []
         self.magic_descriptors = []
 
-    def impute(self, df: pd.DataFrame, max_iter: int = 10) -> List[np.ndarray]:
+    def impute(self, df: pd.DataFrame, max_iter: int = 10) -> list[np.ndarray]:
         if df.isnull().sum().sum() == 0:
             raise ValueError("No missing values found in the input DataFrame.")
         categorical_columns, numerical_columns = self._identify_column_types(df)
@@ -68,7 +68,7 @@ class Phil:
         return self._apply_imputations(df, self.selected_imputers)
 
     @staticmethod
-    def _identify_column_types(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
+    def _identify_column_types(df: pd.DataFrame) -> tuple[list[str], list[str]]:
         categorical_columns = df.select_dtypes(
             include=["object", "category", "str"]
         ).columns.tolist()
@@ -79,7 +79,7 @@ class Phil:
 
     def _create_imputers(
         self, preprocessor: ColumnTransformer, max_iter: int
-    ) -> List[Pipeline]:
+    ) -> list[Pipeline]:
         imputers = []
         domain_knowledge = getattr(self.param_grid, "domain_knowledge", None)
 
@@ -219,7 +219,7 @@ class Phil:
             ]
         )
 
-    def _select_imputations(self, imputers: List[Pipeline]) -> List[Pipeline]:
+    def _select_imputations(self, imputers: list[Pipeline]) -> list[Pipeline]:
         np.random.seed(self.random_state)
         selected_idxs = np.random.choice(
             range(len(imputers)),
@@ -229,8 +229,8 @@ class Phil:
         return [imputers[idx] for idx in selected_idxs]
 
     def _apply_imputations(
-        self, df: pd.DataFrame, imputers: List[Pipeline]
-    ) -> List[np.ndarray]:
+        self, df: pd.DataFrame, imputers: list[Pipeline]
+    ) -> list[np.ndarray]:
         imputations = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=ConvergenceWarning)
@@ -239,7 +239,7 @@ class Phil:
                 imputations.append(imputer.transform(df))
             return imputations
 
-    def generate_descriptors(self) -> List[np.ndarray]:
+    def generate_descriptors(self) -> list[np.ndarray]:
         return self.magic.generate(self.representations)
 
     def fit(self, df: pd.DataFrame, max_iter: int = 5) -> pd.DataFrame:
@@ -265,11 +265,11 @@ class Phil:
         return pd.DataFrame(self.pipeline.transform(df), columns=imputed_columns)
 
     @staticmethod
-    def _get_imputed_columns(transformer: ColumnTransformer) -> List[str]:
+    def _get_imputed_columns(transformer: ColumnTransformer) -> list[str]:
         return transformer.get_feature_names_out()
 
     @staticmethod
-    def _select_representative(descriptors: List[np.ndarray]) -> int:
+    def _select_representative(descriptors: list[np.ndarray]) -> int:
         stacked = np.stack(descriptors)
         avg_descriptor = stacked.mean(axis=0)
         norms = np.linalg.norm(
@@ -278,7 +278,7 @@ class Phil:
         return int(np.argmin(norms))
 
     @staticmethod
-    def _configure_magic_method(magic: str, config) -> Tuple[BaseModel, Magic]:
+    def _configure_magic_method(magic: str, config) -> tuple[BaseModel, Magic]:
         magic_method = getattr(METHODS, magic, None)
         if magic_method is None:
             raise ValueError(f"Magic method '{magic}' not found.")
@@ -325,11 +325,11 @@ class Phil:
     @staticmethod
     def _configure_preprocessor(
         strategy: str,
-        categorical_columns: List[str],
-        numerical_columns: List[str],
+        categorical_columns: list[str],
+        numerical_columns: list[str],
     ) -> ColumnTransformer:
         strategy = ProcessingGallery.get(strategy)
-        transformers: List[Tuple[str, Any, List[str]]] = []
+        transformers: list[tuple[str, Any, list[str]]] = []
 
         for key, preprocessing_config in strategy.items():
             try:

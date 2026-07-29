@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 from pydantic import BaseModel
@@ -255,7 +255,7 @@ class GridGallery:
     - Engineering: Thomas & Rajabi (2021) and Idri et al. (2016) on systematic reviews of engineering data.
     """
 
-    _grids = {
+    _grids: ClassVar[dict[str, ImputationConfig]] = {
         "default": ImputationConfig(
             methods=[
                 "BayesianRidge",
@@ -392,7 +392,7 @@ class ProcessingGallery:
       as discussed in Anand & Mamidi (2020).
     """
 
-    _numeric_methods = {
+    _numeric_methods: ClassVar[dict[str, PreprocessingConfig]] = {
         "default": PreprocessingConfig(method="StandardScaler"),
         "finance": PreprocessingConfig(method="RobustScaler"),
         "healthcare": PreprocessingConfig(method="RobustScaler"),
@@ -402,7 +402,7 @@ class ProcessingGallery:
         "engineering": PreprocessingConfig(method="StandardScaler"),
     }
 
-    _categorical_methods = {
+    _categorical_methods: ClassVar[dict[str, PreprocessingConfig]] = {
         "default": PreprocessingConfig(method="OneHotEncoder"),
         "finance": PreprocessingConfig(
             method="OneHotEncoder", params={"handle_unknown": ["ignore"]}

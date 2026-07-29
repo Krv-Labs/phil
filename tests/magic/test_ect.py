@@ -160,7 +160,7 @@ class TestECT:
         X = np.random.rand(10, 2)  # Single numpy array, not in a list
 
         # Act & Assert
-        with pytest.raises(ValueError, match="Input must be a list of numpy arrays"):
+        with pytest.raises(TypeError, match="Input must be a list of numpy arrays"):
             ect.generate(X)
 
     def test_normalization(self):
