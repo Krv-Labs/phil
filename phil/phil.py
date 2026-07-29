@@ -135,6 +135,26 @@ class Phil:
         imported_module = importlib.import_module(module)
         return getattr(imported_module, method)
 
+    def _map_covariate_subsets(self, domain_knowledge) -> dict:
+        mapped_subsets = {}
+        for target, subset_config in domain_knowledge.covariate_subsets.items():
+            target_mapped = (
+                f"num__{target}"
+                if f"num__{target}" in self.feature_names_out_
+                else f"cat__{target}"
+            )
+            preds_mapped = []
+            for p in subset_config.predictors:
+                if f"num__{p}" in self.feature_names_out_:
+                    preds_mapped.append(f"num__{p}")
+                elif f"cat__{p}" in self.feature_names_out_:
+                    preds_mapped.append(f"cat__{p}")
+                else:
+                    preds_mapped.append(p)
+
+            mapped_subsets[target_mapped] = {"predictors": preds_mapped}
+        return mapped_subsets
+
     def _build_pipeline(
         self,
         preprocessor: ColumnTransformer,
@@ -148,12 +168,26 @@ class Phil:
         # directly instead of wrapping again inside IterativeImputer.
         if method in _STANDALONE_IMPUTERS:
             imputer = estimator
-            if hasattr(imputer, "set_params"):
-                # Prefer Phil's random_state when the imputer supports it.
-                try:
-                    imputer.set_params(random_state=self.random_state)
-                except ValueError:
-                    pass
+            if hasattr(imputer, "get_params") and hasattr(imputer, "set_params"):
+                params = imputer.get_params()
+                updates = {}
+                if "random_state" in params:
+                    updates["random_state"] = self.random_state
+                if "max_iter" in params:
+                    updates["max_iter"] = max_iter
+                if (
+                    method == "MaskedIterativeImputer"
+                    and domain_knowledge
+                    and domain_knowledge.covariate_subsets
+                    and "covariate_subsets" in params
+                ):
+                    updates["covariate_subsets"] = self._map_covariate_subsets(
+                        domain_knowledge
+                    )
+                    if "feature_names" in params:
+                        updates["feature_names"] = self.feature_names_out_
+                if updates:
+                    imputer.set_params(**updates)
             return Pipeline(
                 [
                     ("preprocessor", preprocessor),
@@ -162,23 +196,7 @@ class Phil:
             )
 
         if domain_knowledge and domain_knowledge.covariate_subsets:
-            mapped_subsets = {}
-            for target, subset_config in domain_knowledge.covariate_subsets.items():
-                target_mapped = (
-                    f"num__{target}"
-                    if f"num__{target}" in self.feature_names_out_
-                    else f"cat__{target}"
-                )
-                preds_mapped = []
-                for p in subset_config.predictors:
-                    if f"num__{p}" in self.feature_names_out_:
-                        preds_mapped.append(f"num__{p}")
-                    elif f"cat__{p}" in self.feature_names_out_:
-                        preds_mapped.append(f"cat__{p}")
-                    else:
-                        preds_mapped.append(p)
-
-                mapped_subsets[target_mapped] = {"predictors": preds_mapped}
+            mapped_subsets = self._map_covariate_subsets(domain_knowledge)
 
             imputer = MaskedIterativeImputer(
                 estimator=estimator,
