@@ -40,6 +40,15 @@ def test_fenced_markdown_yaml_rejected() -> None:
     assert report.error_code == "YAML_NOT_RAW"
 
 
+def test_non_mapping_yaml_rejected() -> None:
+    report = validate_config_yaml("123")
+    assert not report.ok
+    assert report.error_code == "CONFIG_YAML_INVALID"
+    assert any("mapping" in issue.message.lower() for issue in report.issues)
+    assert report.agent_action is not None
+    assert "mapping" in report.agent_action.lower()
+
+
 def test_unknown_grid_rejected() -> None:
     config_yaml = "imputation:\n  grid: bogus\n"
     report = validate_config_yaml(config_yaml)
@@ -144,3 +153,15 @@ def test_list_builtin_grids_includes_default() -> None:
     assert "healthcare" in names
     default_entry = next(g for g in grids if g["name"] == "default")
     assert default_entry["methods"]
+    assert default_entry["target_domain"] == "general"
+    assert default_entry["time_complexity"] in {"Low", "Medium", "High"}
+    assert default_entry["suitability"]
+    assert default_entry["data_type_affinity"]
+    assert default_entry["scale_limits"]
+
+
+def test_list_builtin_grids_healthcare_metadata() -> None:
+    grids = list_builtin_grids()
+    healthcare = next(g for g in grids if g["name"] == "healthcare")
+    assert healthcare["time_complexity"] == "High"
+    assert "KNN" in healthcare["scale_limits"] or "100" in healthcare["scale_limits"]

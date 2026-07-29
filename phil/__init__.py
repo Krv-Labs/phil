@@ -18,14 +18,14 @@ from phil.visualization import plot_mds
 
 __version__ = "0.1.0"
 __all__ = [
-    "Phil",
-    "PhilTransformer",
-    "GridGallery",
     "ECT",
-    "ECTConfig",
-    "ImputationConfig",
-    "PreprocessingConfig",
     "CovariateDistributionImputer",
     "DistributionImputer",
+    "ECTConfig",
+    "GridGallery",
+    "ImputationConfig",
+    "Phil",
+    "PhilTransformer",
+    "PreprocessingConfig",
     "plot_mds",
 ]

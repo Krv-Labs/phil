@@ -86,6 +86,71 @@ async def test_list_grids_returns_builtins() -> None:
         names = {g["name"] for g in payload["grids"]}
         assert "default" in names
         assert "healthcare" in names
+        healthcare = next(g for g in payload["grids"] if g["name"] == "healthcare")
+        assert healthcare["time_complexity"] == "High"
+        assert healthcare["suitability"]
+        assert "scale_limits" in healthcare
+
+
+@pytest.mark.asyncio
+async def test_recommend_grid_after_ingest(csv_path: str) -> None:
+    async with Client(mcp) as client:
+        ingest = _payload(await client.call_tool("ingest_dataset", {"path": csv_path}))
+        dataset_id = ingest["dataset_id"]
+        result = _payload(
+            await client.call_tool("recommend_grid", {"dataset_id": dataset_id})
+        )
+        assert result["status"] == "ok"
+        assert result["recommended_grid"] in {
+            "default",
+            "sampling",
+            "finance",
+            "healthcare",
+            "marketing",
+            "engineering",
+        }
+        assert "suggested_samples" in result
+        assert "Recommended Grid:" in result["recommendation"]
+        assert result["grid"]["name"] == result["recommended_grid"]
+
+
+@pytest.mark.asyncio
+async def test_recommend_grid_unknown_dataset_id() -> None:
+    async with Client(mcp) as client:
+        result = _payload(
+            await client.call_tool(
+                "recommend_grid", {"dataset_id": "ds_does_not_exist"}
+            )
+        )
+        assert result.get("status") == "error" or "error" in result
+        blob = json.dumps(result)
+        assert "DATASET_ID_UNKNOWN" in blob or "Unknown dataset_id" in blob
+
+
+@pytest.mark.asyncio
+async def test_recommend_grid_bad_data_path() -> None:
+    async with Client(mcp) as client:
+        result = _payload(
+            await client.call_tool(
+                "recommend_grid",
+                {"data_path": "/tmp/phil_definitely_missing_12345.csv"},
+            )
+        )
+        assert result.get("status") == "error" or "error" in result
+        blob = json.dumps(result)
+        assert "FILE_NOT_FOUND" in blob or "not exist" in blob.lower()
+
+
+@pytest.mark.asyncio
+async def test_imputation_matrix_resource() -> None:
+    async with Client(mcp) as client:
+        resources = await client.list_resources()
+        uris = {str(r.uri) for r in resources}
+        assert "phil://docs/imputation-matrix" in uris
+        contents = await client.read_resource("phil://docs/imputation-matrix")
+        text = "".join(getattr(part, "text", "") or "" for part in contents)
+        assert "Phil Imputation Grid Matrix" in text
+        assert "`healthcare`" in text
 
 
 @pytest.mark.asyncio

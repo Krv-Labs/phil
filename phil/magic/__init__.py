@@ -6,4 +6,4 @@ from phil.magic.base import Magic
 from phil.magic.config import ECTConfig
 from phil.magic.ect import ECT
 
-__all__ = ["Magic", "ECT", "ECTConfig"]
+__all__ = ["ECT", "ECTConfig", "Magic"]

@@ -27,6 +27,7 @@ import yaml
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 
+from phil.gallery import render_imputation_matrix
 from phil.mcp.config import (
     GRID_INTENTS,
     apply_overrides,
@@ -38,9 +39,9 @@ from phil.mcp.config import (
 )
 from phil.mcp.errors import mcp_error, path_access_error, unknown_handle_error
 from phil.mcp.prompts import WORKFLOW_PROMPT
+from phil.mcp.recommend import recommend_grid_for_dataframe
 from phil.mcp.registry import MCPRegistry
 from phil.phil import Phil
-
 
 logger = logging.getLogger(__name__)
 registry = MCPRegistry()
@@ -54,7 +55,7 @@ registry = MCPRegistry()
 # known orchestration keys *before* validation — one patch protects every
 # tool. Unknown keys outside the allowlist are logged at WARNING.
 # ---------------------------------------------------------------------------
-from fastmcp.tools.function_tool import FunctionTool  # noqa: E402
+from fastmcp.tools.function_tool import FunctionTool
 
 _original_function_tool_run = FunctionTool.run
 _KNOWN_ORCHESTRATION_KEYS = frozenset({"wait_for_previous"})
@@ -94,14 +95,29 @@ mcp = FastMCP(
         "`finalize_dataset_upload` trio for sandboxed clients. Returns a "
         "`dataset_id` handle. Polars users: write to Parquet, then ingest.\n"
         "- Characterize: `characterize_dataset`, `probe_columns`.\n"
-        "- Configure: `list_grids`, `create_config`, `validate_config`, "
-        "`refine_config`, `get_active_config`, `refine_active_config`.\n"
+        "- Configure: `recommend_grid`, `list_grids`, `create_config`, "
+        "`validate_config`, `refine_config`, `get_active_config`, "
+        "`refine_active_config`. Resource: `phil://docs/imputation-matrix`.\n"
         "- Run: `run_imputation_sweep`.\n"
         "- Diagnose: `diagnose_sweep`, `get_candidate_descriptors`, "
         "`compare_sweeps`, `get_experiment_history`.\n"
         "- Export: `get_sweep_summary`, `export_imputed_data`."
     ),
 )
+
+
+@mcp.resource(
+    "phil://docs/imputation-matrix",
+    mime_type="text/markdown",
+    description=(
+        "Markdown comparison matrix of built-in imputation grids: domain, "
+        "complexity, affinity, scale limits, and estimator cost notes. "
+        "Compiled from declarative GRID_METADATA."
+    ),
+)
+def imputation_matrix_resource() -> str:
+    """Return the dynamically compiled imputation-grid comparison matrix."""
+    return render_imputation_matrix()
 
 
 # ---------------------------------------------------------------------------
@@ -198,9 +214,9 @@ def _normalize_data_path(path: str) -> str:
 def _read_dataset_file(path: str) -> pd.DataFrame:
     normalized_path = _normalize_data_path(path)
     lowered = normalized_path.lower()
-    if lowered.endswith(".parquet") or lowered.endswith(".pq"):
+    if lowered.endswith((".parquet", ".pq")):
         return pd.read_parquet(normalized_path)
-    if lowered.endswith(".feather") or lowered.endswith(".arrow"):
+    if lowered.endswith((".feather", ".arrow")):
         return pd.read_feather(normalized_path)
     return pd.read_csv(normalized_path)
 
@@ -380,11 +396,15 @@ async def get_runtime_context(ctx: Context = None) -> str:
         "path_guidance": [
             "Use ingest_dataset(path) for host-visible absolute paths.",
             "Polars users: write to Parquet (`df.write_parquet(...)`), then ingest the path.",
-            "SANDBOX ISOLATION: If your file is in a sandbox (e.g. /home/claude), "
-            "use the 'Cache-Bridge' pattern: Copy the file to the `cache_dir` shown "
-            "above, then call `ingest_dataset(path)` on the destination.",
-            "Chunked/Base64 uploads are a last-resort legacy fallback for remote-only "
-            "servers. DO NOT use them for local files.",
+            (
+                "SANDBOX ISOLATION: If your file is in a sandbox (e.g. /home/claude), "
+                "use the 'Cache-Bridge' pattern: Copy the file to the `cache_dir` shown "
+                "above, then call `ingest_dataset(path)` on the destination."
+            ),
+            (
+                "Chunked/Base64 uploads are a last-resort legacy fallback for remote-only "
+                "servers. DO NOT use them for local files."
+            ),
         ],
     }
     return json.dumps(payload, indent=2)
@@ -428,7 +448,7 @@ async def ingest_dataset(path: str, ctx: Context = None) -> str:
             agent_action="Provide a readable host-visible dataset path.",
             details={"path_context": {"attempted_path": path}},
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("ingest_dataset", str(e))
 
 
@@ -446,7 +466,7 @@ async def begin_dataset_upload(
     try:
         record = registry.begin_upload(filename, media_type=media_type)
         return json.dumps(dataclasses.asdict(record), indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("begin_dataset_upload", str(e))
 
 
@@ -465,7 +485,7 @@ async def append_dataset_chunk(
         if encoding == "base64":
             try:
                 chunk_bytes = base64.b64decode(chunk, validate=True)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return mcp_error(
                     "append_dataset_chunk",
                     "Failed to decode base64 chunk payload.",
@@ -487,7 +507,7 @@ async def append_dataset_chunk(
         if record is None:
             return unknown_handle_error("append_dataset_chunk", "upload_id", upload_id)
         return json.dumps(dataclasses.asdict(record), indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("append_dataset_chunk", str(e))
 
 
@@ -506,7 +526,7 @@ async def finalize_dataset_upload(upload_id: str, ctx: Context = None) -> str:
         session = _get_session(ctx)
         session.dataset_id = record.dataset_id
         return json.dumps(dataclasses.asdict(record), indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("finalize_dataset_upload", str(e))
 
 
@@ -529,7 +549,7 @@ async def characterize_dataset(
         df, normalized_path = await _load_session_dataframe(
             session, dataset_id=dataset_id, data_path=data_path
         )
-        n_rows = int(len(df))
+        n_rows = len(df)
         n_cols = int(df.shape[1])
         column_profiles: list[dict[str, Any]] = []
         for col in df.columns:
@@ -568,7 +588,7 @@ async def characterize_dataset(
         return path_access_error("characterize_dataset", data_path or dataset_id)
     except ToolError as e:
         return mcp_error("characterize_dataset", str(e))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("characterize_dataset", str(e))
 
 
@@ -638,7 +658,7 @@ async def probe_columns(
         )
     except LookupError:
         return unknown_handle_error("probe_columns", "dataset_id", dataset_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("probe_columns", str(e))
 
 
@@ -769,7 +789,8 @@ def _decode_categorical_columns(
 async def list_grids(ctx: Context = None) -> str:
     """
     Return the built-in imputation grids registered with Phil's
-    ``GridGallery``, including the method list and intent blurb.
+    ``GridGallery``, including method lists and declarative metadata
+    (intent, suitability, affinity, time complexity, scale limits).
     """
     try:
         payload = {
@@ -782,8 +803,36 @@ async def list_grids(ctx: Context = None) -> str:
             ),
         }
         return json.dumps(payload, indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("list_grids", str(e))
+
+
+@mcp.tool()
+async def recommend_grid(
+    dataset_id: str = "",
+    data_path: str = "",
+    ctx: Context = None,
+) -> str:
+    """
+    Recommend a built-in imputation grid from dataset scale, categorical
+    cardinality, and missingness heuristics. Prefer this after
+    ``characterize_dataset`` and before ``create_config``.
+    """
+    try:
+        session = _get_session(ctx)
+        df, normalized_path = await _load_session_dataframe(
+            session, dataset_id=dataset_id, data_path=data_path
+        )
+        payload = recommend_grid_for_dataframe(df)
+        payload["dataset_id"] = dataset_id or None
+        payload["data_path"] = normalized_path
+        return json.dumps(payload, indent=2)
+    except LookupError:
+        return unknown_handle_error("recommend_grid", "dataset_id", dataset_id)
+    except FileNotFoundError:
+        return path_access_error("recommend_grid", data_path or dataset_id)
+    except Exception as e:  # noqa: BLE001
+        return mcp_error("recommend_grid", str(e))
 
 
 @mcp.tool()
@@ -843,7 +892,7 @@ async def create_config(
         return json.dumps(payload, indent=2)
     except LookupError:
         return unknown_handle_error("create_config", "dataset_id", dataset_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("create_config", str(e))
 
 
@@ -865,7 +914,7 @@ async def validate_config(
         return render_validation_report(report)
     except LookupError:
         return unknown_handle_error("validate_config", "dataset_id", dataset_id)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("validate_config", str(e))
 
 
@@ -898,7 +947,7 @@ async def refine_config(
                 "Use only valid override keys. See error message for the valid list."
             ),
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("refine_config", str(e))
 
 
@@ -954,7 +1003,7 @@ async def refine_active_config(overrides: dict[str, Any], ctx: Context = None) -
                 "Use only valid override keys. See error message for the valid list."
             ),
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("refine_active_config", str(e))
 
 
@@ -993,8 +1042,7 @@ async def run_imputation_sweep(
                 _validate_config_path(config_path)
             except FileNotFoundError:
                 return path_access_error("run_imputation_sweep", config_path)
-            with open(config_path) as f:
-                current_yaml = f.read()
+            current_yaml = Path(config_path).read_text()
         elif session.active_config_yaml:
             current_yaml = session.active_config_yaml
         else:
@@ -1057,7 +1105,7 @@ async def run_imputation_sweep(
                 error_code="NO_MISSING_VALUES",
                 agent_action="Pass a dataset containing missing values, or skip imputation.",
                 details={
-                    "n_rows": int(len(prepared_df)),
+                    "n_rows": len(prepared_df),
                     "n_cols": int(prepared_df.shape[1]),
                     "dropped_columns": dropped_columns,
                 },
@@ -1086,10 +1134,7 @@ async def run_imputation_sweep(
                 random_state=kwargs["random_state"],
             )
             progress_callback("imputing", 0.1)
-            try:
-                imputed = phil_obj.fit(prepared_df, max_iter=kwargs["max_iter"])
-            except Exception as exc:  # pragma: no cover - defensive
-                raise exc
+            imputed = phil_obj.fit(prepared_df, max_iter=kwargs["max_iter"])
             progress_callback("scoring", 0.85)
             descriptors = list(phil_obj.magic_descriptors)
             progress_callback("done", 1.0)
@@ -1163,7 +1208,7 @@ async def run_imputation_sweep(
                 "max_iter": kwargs["max_iter"],
                 "random_state": kwargs["random_state"],
                 "method_counts": method_counts,
-                "n_rows": int(len(prepared_df)),
+                "n_rows": len(prepared_df),
                 "n_cols": int(prepared_df.shape[1]),
                 "total_missing": total_missing,
                 "dropped_columns": dropped_columns,
@@ -1213,7 +1258,7 @@ async def run_imputation_sweep(
             agent_action=e.agent_action,
             details=e.details,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("run_imputation_sweep", str(e))
 
 
@@ -1274,7 +1319,7 @@ async def diagnose_sweep(run_id: str = "", ctx: Context = None) -> str:
             "config_yaml": record.config_yaml,
         }
         return json.dumps(payload, indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("diagnose_sweep", str(e))
 
 
@@ -1331,7 +1376,7 @@ async def get_candidate_descriptors(
             },
             indent=2,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("get_candidate_descriptors", str(e))
 
 
@@ -1365,7 +1410,7 @@ async def compare_sweeps(run_a: str, run_b: str, ctx: Context = None) -> str:
             },
         }
         return json.dumps(payload, indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("compare_sweeps", str(e))
 
 
@@ -1422,7 +1467,7 @@ async def get_sweep_summary(run_id: str = "", ctx: Context = None) -> str:
         if record is None:
             return unknown_handle_error("get_sweep_summary", "run_id", run_id)
         return json.dumps(dataclasses.asdict(record), indent=2)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("get_sweep_summary", str(e))
 
 
@@ -1457,9 +1502,9 @@ async def export_imputed_data(
         target = _normalize_data_path(output_path)
         Path(target).parent.mkdir(parents=True, exist_ok=True)
         lowered = target.lower()
-        if lowered.endswith(".parquet") or lowered.endswith(".pq"):
+        if lowered.endswith((".parquet", ".pq")):
             await asyncio.to_thread(_write_parquet, session.imputed, target)
-        elif lowered.endswith(".feather") or lowered.endswith(".arrow"):
+        elif lowered.endswith((".feather", ".arrow")):
             await asyncio.to_thread(_write_feather, session.imputed, target)
         else:
             await asyncio.to_thread(_write_csv, session.imputed, target)
@@ -1468,12 +1513,12 @@ async def export_imputed_data(
                 "status": "ok",
                 "run_id": session.latest_run_id,
                 "output_path": target,
-                "n_rows": int(len(session.imputed)),
+                "n_rows": len(session.imputed),
                 "n_cols": int(session.imputed.shape[1]),
             },
             indent=2,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return mcp_error("export_imputed_data", str(e))
 
 

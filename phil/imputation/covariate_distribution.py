@@ -4,9 +4,9 @@ Covariate-conditional distribution imputation strategy.
 
 import numpy as np
 import pandas as pd
+from scipy.spatial.distance import cdist
 from sklearn.base import BaseEstimator
 from sklearn.metrics.pairwise import euclidean_distances
-from scipy.spatial.distance import cdist
 
 
 class CovariateDistributionImputer(BaseEstimator):

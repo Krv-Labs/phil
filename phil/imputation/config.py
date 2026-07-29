@@ -2,26 +2,26 @@
 Configuration models for Phil's imputation strategies.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 from sklearn.model_selection import ParameterGrid
 
 
 class CovariateSubset(BaseModel):
-    predictors: List[str]
-    citations: List[str]
+    predictors: list[str]
+    citations: list[str]
 
 
 class CovarianceMatrix(BaseModel):
-    matrix: List[List[float]]
-    variables: List[str]
-    citations: List[str]
+    matrix: list[list[float]]
+    variables: list[str]
+    citations: list[str]
 
 
 class DomainKnowledge(BaseModel):
-    covariate_subsets: Optional[Dict[str, CovariateSubset]] = None
-    covariance_matrix: Optional[CovarianceMatrix] = None
+    covariate_subsets: dict[str, CovariateSubset] | None = None
+    covariance_matrix: CovarianceMatrix | None = None
 
 
 class ImputationConfig(BaseModel):
@@ -29,10 +29,10 @@ class ImputationConfig(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
-    methods: List[str] = Field(..., description="Names of imputation methods")
-    modules: List[str] = Field(..., description="Python modules containing methods")
-    grids: List[ParameterGrid] = Field(..., description="Parameter grids for methods")
-    domain_knowledge: Optional[DomainKnowledge] = Field(
+    methods: list[str] = Field(..., description="Names of imputation methods")
+    modules: list[str] = Field(..., description="Python modules containing methods")
+    grids: list[ParameterGrid] = Field(..., description="Parameter grids for methods")
+    domain_knowledge: DomainKnowledge | None = Field(
         None, description="Domain knowledge for covariate imputation"
     )
 
@@ -42,4 +42,4 @@ class PreprocessingConfig(BaseModel):
 
     method: str
     module: str = "sklearn.preprocessing"
-    params: Dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)

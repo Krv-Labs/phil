@@ -80,8 +80,10 @@ Example Claude Desktop config (`~/Library/Application Support/Claude/claude_desk
 ```
 
 The server exposes tools for the full sweep workflow — `ingest_dataset`,
-`characterize_dataset`, `list_grids`, `create_config`, `validate_config`,
-`run_imputation_sweep`, `diagnose_sweep`, `export_imputed_data`, and more.
+`characterize_dataset`, `recommend_grid`, `list_grids`, `create_config`,
+`validate_config`, `run_imputation_sweep`, `diagnose_sweep`,
+`export_imputed_data`, and more. Agents can also read the
+`phil://docs/imputation-matrix` resource for grid comparison metadata.
 Polars users write to Parquet and ingest the file path. See the
 [MCP guide](docs/source/userGuides/mcp.rst) for setup tabs, the full tool
 table, and an example dialog.

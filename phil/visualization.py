@@ -20,13 +20,13 @@ def plot_mds(
     ax=None,
     figsize: tuple[int, int] = (8, 6),
     random_state: int | None = None,
-) -> tuple["Figure", np.ndarray]:
+) -> tuple[Figure, np.ndarray]:
     """
     Visualize the ECT descriptor space via Multi-Dimensional Scaling (MDS).
     """
     try:
-        import matplotlib.pyplot as plt
         import matplotlib.patheffects as pe
+        import matplotlib.pyplot as plt
     except ImportError as exc:
         raise ImportError(
             "matplotlib is required for visualization. "

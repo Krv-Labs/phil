@@ -15,18 +15,14 @@ from typing import Any
 import yaml
 from sklearn.model_selection import ParameterGrid
 
-from phil.gallery import GridGallery
+from phil.gallery import GRID_METADATA, GridGallery
 from phil.imputation import ImputationConfig
 from phil.magic import ECTConfig
 
-
+# Derived from gallery.GRID_METADATA so MCP blurbs cannot drift from the
+# declarative metadata source of truth.
 GRID_INTENTS: dict[str, str] = {
-    "default": "Mixed regression imputers across BayesianRidge, Decision Tree, Random Forest, and Gradient Boosting.",
-    "sampling": "Distribution sampling imputation across 100 seeds (good for preserving marginals).",
-    "finance": "Iterative + KNN + Simple imputers tuned for tabular financial data.",
-    "healthcare": "KNN, Simple, and Iterative imputers tuned for clinical tables.",
-    "marketing": "Categorical-friendly Simple, KNN, and Iterative imputers.",
-    "engineering": "Robust mean/median + KNN + Decision-Tree iterative imputation for sensor data.",
+    name: meta.intent for name, meta in GRID_METADATA.items()
 }
 
 _ALLOWED_TOP_LEVEL = {"run", "imputation", "magic", "output"}
@@ -93,7 +89,7 @@ def parse_yaml_mapping(config_yaml: str) -> dict[str, Any]:
         )
     parsed = yaml.safe_load(config_yaml)
     if not isinstance(parsed, dict):
-        raise ValueError("config_yaml must be a valid YAML mapping")
+        raise TypeError("config_yaml must be a valid YAML mapping")
     return parsed
 
 
@@ -142,17 +138,20 @@ def validate_config_yaml(
 
     try:
         raw = parse_yaml_mapping(config_yaml)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         error_code = "YAML_NOT_RAW" if "raw YAML" in str(exc) else "CONFIG_YAML_INVALID"
+        agent_action = (
+            "Pass raw YAML only. Do not wrap config_yaml in Markdown fences."
+            if error_code == "YAML_NOT_RAW"
+            else "Pass a YAML mapping (key/value document), not a bare scalar or list."
+        )
         return ValidationReport(
             ok=False,
             normalized_yaml=None,
             resolved_dataset_path=dataset_path,
             issues=[ValidationIssue(path="$", message=str(exc))],
             error_code=error_code,
-            agent_action=(
-                "Pass raw YAML only. Do not wrap config_yaml in Markdown fences."
-            ),
+            agent_action=agent_action,
         )
 
     _validate_known_sections(raw, issues)
@@ -316,27 +315,34 @@ def _validate_imputation(section: Any, issues: list[ValidationIssue]) -> None:
                     )
 
     for int_key in ("samples", "random_state", "max_iter"):
-        if int_key in section and section[int_key] is not None:
-            if not isinstance(section[int_key], int) or isinstance(
-                section[int_key], bool
-            ):
-                issues.append(
-                    ValidationIssue(
-                        path=f"$.imputation.{int_key}",
-                        message=f"'{int_key}' must be an integer.",
-                        received=section[int_key],
-                    )
-                )
-
-    if "samples" in section and isinstance(section["samples"], int):
-        if section["samples"] <= 0:
+        if (
+            int_key in section
+            and section[int_key] is not None
+            and (
+                not isinstance(section[int_key], int)
+                or isinstance(section[int_key], bool)
+            )
+        ):
             issues.append(
                 ValidationIssue(
-                    path="$.imputation.samples",
-                    message="'samples' must be > 0.",
-                    received=section["samples"],
+                    path=f"$.imputation.{int_key}",
+                    message=f"'{int_key}' must be an integer.",
+                    received=section[int_key],
                 )
             )
+
+    if (
+        "samples" in section
+        and isinstance(section["samples"], int)
+        and section["samples"] <= 0
+    ):
+        issues.append(
+            ValidationIssue(
+                path="$.imputation.samples",
+                message="'samples' must be > 0.",
+                received=section["samples"],
+            )
+        )
 
     if "drop_cols" in section and section["drop_cols"] is not None:
         drop_cols = section["drop_cols"]
@@ -635,16 +641,26 @@ def config_to_phil_kwargs(config_yaml: str) -> dict[str, Any]:
 
 
 def list_builtin_grids() -> list[dict[str, Any]]:
-    """Return a list of built-in grid descriptions."""
+    """Return a list of built-in grid descriptions with declarative metadata."""
     payload: list[dict[str, Any]] = []
     for name in sorted(_BUILTIN_GRIDS):
         grid: ImputationConfig = GridGallery.get(name)
-        payload.append(
-            {
-                "name": name,
-                "intent": GRID_INTENTS.get(name, ""),
-                "methods": list(grid.methods),
-                "modules": list(grid.modules),
-            }
-        )
+        meta = GRID_METADATA.get(name)
+        entry: dict[str, Any] = {
+            "name": name,
+            "intent": GRID_INTENTS.get(name, ""),
+            "methods": list(grid.methods),
+            "modules": list(grid.modules),
+        }
+        if meta is not None:
+            entry.update(
+                {
+                    "target_domain": meta.target_domain,
+                    "suitability": meta.suitability,
+                    "data_type_affinity": list(meta.data_type_affinity),
+                    "time_complexity": meta.time_complexity,
+                    "scale_limits": meta.scale_limits,
+                }
+            )
+        payload.append(entry)
     return payload

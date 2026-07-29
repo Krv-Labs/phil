@@ -14,7 +14,6 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 _CACHE_DIR = Path(tempfile.gettempdir()) / "phil_mcp"
 _DATASETS_PATH = _CACHE_DIR / "datasets.json"
 _DATASET_FILES_DIR = _CACHE_DIR / "datasets"
@@ -88,7 +87,7 @@ class MCPRegistry:
         resolved = Path(path).expanduser().resolve(strict=True)
         stat = resolved.stat()
         digest = hashlib.sha256(
-            f"{resolved}:{stat.st_size}:{stat.st_mtime_ns}".encode("utf-8")
+            f"{resolved}:{stat.st_size}:{stat.st_mtime_ns}".encode()
         ).hexdigest()[:12]
         record = DatasetRecord(
             dataset_id=f"ds_{digest}",
@@ -263,13 +262,12 @@ class MCPRegistry:
 
     @contextmanager
     def _locked_registry(self):
-        with _PROCESS_LOCK:
-            with _LOCK_PATH.open("a+b") as handle:
-                self._acquire_file_lock(handle)
-                try:
-                    yield
-                finally:
-                    self._release_file_lock(handle)
+        with _PROCESS_LOCK, _LOCK_PATH.open("a+b") as handle:
+            self._acquire_file_lock(handle)
+            try:
+                yield
+            finally:
+                self._release_file_lock(handle)
 
     @staticmethod
     def _acquire_file_lock(handle) -> None:

@@ -2,7 +2,7 @@
 Scikit-learn compatible transformers for Phil.
 """
 
-from typing import Any, Optional, Union
+from typing import Any
 
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -15,10 +15,10 @@ class PhilTransformer(BaseEstimator, TransformerMixin):
     def __init__(
         self,
         samples: int = 30,
-        param_grid: Union[str, ImputationConfig] = "default",
+        param_grid: str | ImputationConfig = "default",
         magic: str = "ECT",
-        config: Optional[dict] = None,
-        random_state: Optional[int] = None,
+        config: dict | None = None,
+        random_state: int | None = None,
         max_iter: int = 5,
     ):
         self.samples = samples
