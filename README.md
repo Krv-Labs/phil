@@ -1,5 +1,11 @@
 # Phil
 
+<p align="left">
+  <a href="https://pypi.org/project/philler/"><img src="https://img.shields.io/pypi/v/philler?color=3776AB&logo=python&logoColor=ffd43b" alt="PyPI"></a>
+  <a href="https://pypi.org/project/philler/"><img src="https://img.shields.io/pypi/pyversions/philler" alt="Python versions"></a>
+  <a href="https://github.com/Krv-Labs/phil/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Krv-Labs/phil" alt="License"></a>
+</p>
+
 **Representation-guided imputation for missing tabular data** — PyPI package [`philler`](https://pypi.org/project/philler/) (import: `phil`).
 
 Phil runs a grid of imputation strategies, scores each candidate with an Euler Characteristic Transform (ECT) descriptor via the [`trailed`](https://pypi.org/project/trailed/) backend, and selects the most representative result.
@@ -150,3 +156,11 @@ uv run sphinx-build -M html docs/source docs/build
 ```
 
 </details>
+
+---
+
+<p align="left">
+  <a href="https://krv.ai">
+    <img src="https://raw.githubusercontent.com/Krv-Labs/topos/main/docs/source/_static/made-by-krv.svg" alt="Made by Krv Labs" height="24">
+  </a>
+</p>
