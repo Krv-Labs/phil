@@ -1,0 +1,79 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Build a binary wheel and a source tarball
+        run: uv build
+
+      - name: Store the distribution packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  github-release:
+    name: Create GitHub Release
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all the dists
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+  publish-to-pypi:
+    name: Publish distribution to PyPI
+    needs:
+      - github-release
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      url: https://pypi.org/project/philler/
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download all the dists
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish distribution to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          skip-existing: true

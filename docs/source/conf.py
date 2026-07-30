@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath("../.."))
 project = "Phil"
 author = "Krv Labs"
 copyright = "2026, Krv Labs"
-release = "1.0.0"
+release = "1.1.0"
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -47,3 +47,4 @@ html_js_files = ["logo-link.js"]
 
 nbsphinx_allow_errors = True
 autodoc_mock_imports = ["trailed"]
+
