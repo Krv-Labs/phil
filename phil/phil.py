@@ -57,11 +57,11 @@ class Phil:
         self.trim_quantile = float(trim_quantile)
         self.representations = []
         self.magic_descriptors = []
-        self.standardized_candidates_: list[np.ndarray] = []
-        self.imputed_candidates_: list[pd.DataFrame] = []
-        self.candidate_metadata_: list[dict[str, Any]] = []
-        self.ect_collapse_result_: ECTCollapseResult | None = None
-        self.collapse_result_: ECTCollapseResult | None = None
+        self.standardized_candidates_ = []
+        self.imputed_candidates_ = []
+        self.candidate_metadata_ = []
+        self.ect_collapse_result_ = None
+        self.collapse_result_ = None
 
     def impute(self, df: pd.DataFrame, max_iter: int = 10) -> list[np.ndarray]:
         if df.isnull().sum().sum() == 0:
@@ -130,7 +130,11 @@ class Phil:
                     and "covariance_matrix" in model.__init__.__code__.co_varnames
                 ):
                     compatible_params["covariance_matrix"] = (
-                        domain_knowledge.covariance_matrix.matrix
+                        self._align_covariance_for_cdi(
+                            np.asarray(domain_knowledge.covariance_matrix.matrix),
+                            domain_knowledge.covariance_matrix.variables,
+                            preprocessor,
+                        )
                     )
 
                 estimator = model(**compatible_params)
@@ -154,7 +158,9 @@ class Phil:
             cov_vars = domain_knowledge.covariance_matrix.variables or []
             cov_mat = np.asarray(domain_knowledge.covariance_matrix.matrix, dtype=float)
             for k_neighbors in (3, 5):
-                sub_cov = self._align_covariance_for_cdi(cov_mat, cov_vars)
+                sub_cov = self._align_covariance_for_cdi(
+                    cov_mat, cov_vars, preprocessor
+                )
                 cdi = CovariateDistributionImputer(
                     n_neighbors=k_neighbors,
                     random_state=self.random_state,
@@ -173,17 +179,24 @@ class Phil:
         return imputers
 
     def _align_covariance_for_cdi(
-        self, cov_mat: np.ndarray, cov_vars: list[str]
-    ) -> np.ndarray | None:
-        """
-        IterativeImputer passes (n_features - 1) neighbor columns to each feature's
-        estimator. Only pass a fixed covariance_matrix to CovariateDistributionImputer
-        when its dimensions match (n_features - 1, n_features - 1).
-        """
-        n_feats = len(getattr(self, "feature_names_out_", []))
-        if n_feats > 1 and cov_mat.shape == (n_feats - 1, n_feats - 1):
-            return cov_mat
-        return None
+        self, cov_mat: np.ndarray, cov_vars: list[str], preprocessor: ColumnTransformer
+    ) -> np.ndarray:
+        """Align an original-unit numeric covariance to the scaled feature order."""
+        features = self.feature_names_out_
+        if any(not name.startswith("num__") for name in features):
+            raise ValueError("Covariance priors require numeric features only.")
+        columns = [name.removeprefix("num__") for name in features]
+        variables = cov_vars or list(self._input_df_.columns)
+        if (
+            cov_mat.shape != (len(variables), len(variables))
+            or len(set(variables)) != len(variables)
+            or not set(columns).issubset(variables)
+        ):
+            raise ValueError("Covariance matrix must cover all numeric feature names.")
+        indices = [variables.index(col) for col in columns]
+        aligned = np.asarray(cov_mat, dtype=float)[np.ix_(indices, indices)]
+        scale = preprocessor.named_transformers_["num"].scale_
+        return aligned / np.outer(scale, scale)
 
     @classmethod
     def _resolve_estimator_params(cls, params: dict) -> dict:
@@ -261,7 +274,7 @@ class Phil:
         max_vec = np.full(n_feats, np.inf, dtype=float)
 
         num_transformer = None
-        num_cols: list[str] = []
+        num_cols = []
         if (
             hasattr(preprocessor, "named_transformers_")
             and "num" in preprocessor.named_transformers_
@@ -405,8 +418,14 @@ class Phil:
                 ]
             )
 
-        if domain_knowledge and getattr(domain_knowledge, "covariate_subsets", None):
-            mapped_subsets = self._map_covariate_subsets(domain_knowledge)
+        if (
+            domain_knowledge and getattr(domain_knowledge, "covariate_subsets", None)
+        ) or isinstance(estimator, CovariateDistributionImputer):
+            mapped_subsets = (
+                self._map_covariate_subsets(domain_knowledge)
+                if domain_knowledge and domain_knowledge.covariate_subsets
+                else None
+            )
             use_post = bool(
                 want_posterior
                 and (estimator is None or type(estimator).__name__ == "BayesianRidge")
@@ -459,7 +478,7 @@ class Phil:
 
     @staticmethod
     def _extract_candidate_metadata(imputers: list[Pipeline]) -> list[dict[str, Any]]:
-        metadata: list[dict[str, Any]] = []
+        metadata = []
         for idx, pipe in enumerate(imputers):
             try:
                 imp = pipe.named_steps.get("imputer") or pipe["imputer"]
@@ -502,7 +521,7 @@ class Phil:
                 raise AttributeError("Preprocessor is not fitted.")
 
             f_names = [str(f) for f in preprocessor.get_feature_names_out()]
-            reconstructed: dict[str, Any] = {}
+            reconstructed = {}
 
             if numerical_columns and "num" in preprocessor.named_transformers_:
                 num_trans = preprocessor.named_transformers_["num"]
@@ -539,8 +558,8 @@ class Phil:
                                 else getattr(b, "max_value", None)
                             )
                             if lo is not None or hi is not None:
-                                col_vals = np.clip(
-                                    col_vals,
+                                col_vals[~obs_mask] = np.clip(
+                                    col_vals[~obs_mask],
                                     -np.inf if lo is None else float(lo),
                                     np.inf if hi is None else float(hi),
                                 )
@@ -650,6 +669,11 @@ class Phil:
             ),
             candidate_metadata=getattr(self, "candidate_metadata_", None),
             magic_estimator=self.magic,
+            preprocessor=(
+                self.selected_imputers[0].named_steps.get("preprocessor")
+                if getattr(self, "imputed_candidates_", None)
+                else None
+            ),
             variable_bounds=var_bounds,
         )
         self.ect_collapse_result_ = result
@@ -673,57 +697,14 @@ class Phil:
             transformer=self.pipeline["preprocessor"]
         )
 
-        # If impute() ran unmocked and produced inverse-transformed candidates
-        # matching the input DataFrame columns, run the configured collapse strategy
-        # and return the original-unit DataFrame when non-default strategy is used,
-        # or if columns match original_df.
         if getattr(self, "imputed_candidates_", None) and len(
             self.imputed_candidates_
         ) == len(self.representations):
-            try:
-                self.ect_collapse_result_ = collapse_ect_ensemble(
-                    candidates=self.imputed_candidates_,
-                    descriptors=self.magic_descriptors,
-                    strategy=self.collapse_strategy,
-                    temperature=getattr(self, "temperature", 1.0),
-                    trim_quantile=getattr(self, "trim_quantile", 0.2),
-                    original_df=df,
-                    standardized_candidates=self.standardized_candidates_,
-                    candidate_metadata=self.candidate_metadata_,
-                    magic_estimator=self.magic,
-                    variable_bounds=(
-                        getattr(
-                            self.param_grid.domain_knowledge, "variable_bounds", None
-                        )
-                        if getattr(self.param_grid, "domain_knowledge", None)
-                        else None
-                    ),
-                )
-                self.collapse_result_ = self.ect_collapse_result_
-                self.closest_index = self.ect_collapse_result_.selected_index
-                self.pipeline = self.selected_imputers[self.closest_index]
-            except (ValueError, RuntimeError, TypeError, AttributeError):
-                self.ect_collapse_result_ = None
-
-        # When imputed_columns matches original df columns or when inverse-transformed
-        # candidates have identical width to original df and no OneHot expansion broke
-        # column count, return the original-scale collapsed DataFrame if requested
-        if (
-            self.ect_collapse_result_ is not None
-            and len(imputed_columns) == self.ect_collapse_result_.collapsed_df.shape[1]
-        ):
-            out_df = self.ect_collapse_result_.collapsed_df.copy()
-            # Keep original column names if they match df.columns, unless caller mocked _get_imputed_columns
-            if list(imputed_columns) == list(df.columns):
-                out_df.columns = imputed_columns
-            elif all(
-                str(c).startswith(("num__", "cat__")) for c in imputed_columns
-            ) and list(out_df.columns) == list(df.columns):
-                # Return clean original column names and original units!
-                return out_df
-            else:
-                out_df.columns = imputed_columns
-            return out_df
+            return self.collapse(
+                strategy=self.collapse_strategy,
+                temperature=self.temperature,
+                trim_quantile=self.trim_quantile,
+            ).collapsed_df.copy()
 
         X = self.representations[self.closest_index]
         return pd.DataFrame(X, columns=imputed_columns)
@@ -740,9 +721,7 @@ class Phil:
         imputed_columns = self._get_imputed_columns(
             transformer=self.pipeline["preprocessor"]
         )
-        if all(str(c).startswith(("num__", "cat__")) for c in imputed_columns) and list(
-            inv_df.columns
-        ) == list(df.columns):
+        if list(inv_df.columns) == list(df.columns):
             return inv_df
         if len(imputed_columns) == inv_df.shape[1]:
             inv_df.columns = imputed_columns

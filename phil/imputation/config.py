@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from sklearn.model_selection import ParameterGrid
 
-ESTIMATOR_MAP: dict[str, tuple[str, str]] = {
+ESTIMATOR_MAP = {
     "BayesianRidge": ("sklearn.linear_model", "BayesianRidge"),
     "Ridge": ("sklearn.linear_model", "Ridge"),
     "RandomForest": ("sklearn.ensemble", "RandomForestRegressor"),

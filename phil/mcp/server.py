@@ -691,7 +691,7 @@ async def probe_columns(
             if confined and len(vc):
                 vc = vc[vc >= 5]
             top_values = vc.head(5).to_dict() if len(vc) else {}
-            profile: dict[str, Any] = {
+            profile = {
                 "name": str(col),
                 "dtype": str(series.dtype),
                 "n_unique": int(series.nunique(dropna=True)),
@@ -1525,7 +1525,7 @@ def _session_candidate_methods(session: _PhilSession) -> list[str]:
     methods = getattr(session.phil, "candidate_methods_", None)
     if methods:
         return list(methods)
-    labels: list[str] = []
+    labels = []
     for pipe in getattr(session.phil, "selected_imputers", []):
         try:
             est = pipe["imputer"].estimator

@@ -2,6 +2,7 @@
 Agentic ECT signature distribution analysis and ensemble collapse strategies.
 
 Provides:
+
 1. ``COLLAPSE_STRATEGIES``: Declarative catalog of 6 ECT collapse methods
    (``barycenter``, ``trimmed_barycenter``, ``frechet_medoid``,
    ``euclidean_medoid``, ``mode_medoid``, ``cluster_barycenter``).
@@ -28,7 +29,7 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import pdist, squareform
 from sklearn.metrics import silhouette_score
 
-COLLAPSE_STRATEGIES: dict[str, dict[str, Any]] = {
+COLLAPSE_STRATEGIES = {
     "barycenter": {
         "name": "barycenter",
         "kind": "pooling",
@@ -136,9 +137,9 @@ class ECTCollapseResult:
     selected_index: int
     weights: list[float]
     effective_ensemble_size: float
-    ect_distance_to_median: float
+    ect_distance_to_median: float | None
     medoid_ect_distance_to_median: float
-    manifold_convexity_ratio: float
+    manifold_convexity_ratio: float | None
     non_convex_manifold_warning: bool
     distribution_summary: dict[str, Any]
     column_variability: dict[str, dict[str, Any]]
@@ -257,7 +258,7 @@ def analyze_ect_distribution(
             else np.zeros_like(dists_to_median)
         )
 
-    outlier_candidates: list[dict[str, Any]] = []
+    outlier_candidates = []
     for idx in range(n):
         if float(mod_z[idx]) > 2.5 and dists_to_median[idx] > med_d:
             meta = (
@@ -298,7 +299,7 @@ def analyze_ect_distribution(
 
     is_multimodal = bool(best_k >= 2 and best_sil >= 0.35)
 
-    clusters_info: list[dict[str, Any]] = []
+    clusters_info = []
     if is_multimodal:
         unique_clusters = sorted(np.unique(best_labels).tolist())
     else:
@@ -313,7 +314,7 @@ def analyze_ect_distribution(
         medoid_local = int(np.argmin(sub_dists))
         medoid_global = member_idxs[medoid_local]
 
-        methods_in_cluster: dict[str, int] = {}
+        methods_in_cluster = {}
         for m_idx in member_idxs:
             meta = (
                 candidate_metadata[m_idx]
@@ -553,7 +554,7 @@ def _pool_candidate_dataframes(
         out = candidates[active_idxs[0]].copy()
     else:
         template = candidates[0]
-        out_data: dict[str, Any] = {}
+        out_data = {}
         for col in template.columns:
             col_series = template[col]
             if pd.api.types.is_numeric_dtype(
@@ -577,7 +578,7 @@ def _pool_candidate_dataframes(
                 active_w = weights[active_idxs]
                 chosen_col = []
                 for r in range(n_rows):
-                    scores: dict[Any, float] = {}
+                    scores = {}
                     for m_pos, w_val in enumerate(active_w):
                         v = vals_matrix[m_pos][r]
                         scores[v] = scores.get(v, 0.0) + float(w_val)
@@ -602,7 +603,17 @@ def _pool_candidate_dataframes(
                 lo = getattr(b_cfg, "min_value", None)
                 hi = getattr(b_cfg, "max_value", None)
             if lo is not None or hi is not None:
-                out[col] = out[col].clip(lower=lo, upper=hi)
+                missing = (
+                    original_df[col].isna()
+                    if original_df is not None and col in original_df
+                    else np.ones(len(out), dtype=bool)
+                )
+                out.loc[missing, col] = out.loc[missing, col].clip(lower=lo, upper=hi)
+
+    if original_df is not None:
+        for col in out.columns.intersection(original_df.columns):
+            observed = original_df[col].notna()
+            out.loc[observed, col] = original_df.loc[observed, col]
 
     return out
 
@@ -632,7 +643,7 @@ def _compute_rubin_column_variability(
     )
 
     template = candidates[0]
-    report: dict[str, dict[str, Any]] = {}
+    report = {}
 
     for col in template.columns:
         if original_df is not None and col in original_df.columns:
@@ -677,10 +688,10 @@ def _compute_rubin_column_variability(
         else:
             # Categorical agreement across candidates on missing cells
             mat_obj = [c[col].loc[miss_mask].tolist() for c in candidates]
-            agreements: list[float] = []
+            agreements = []
             for r_idx in range(n_missing):
-                counts: dict[Any, float] = {}
-                for m_idx, w_val in enumerate(w):
+                counts = {}
+                for m_idx, w_val in enumerate(w_var):
                     val = mat_obj[m_idx][r_idx]
                     counts[val] = counts.get(val, 0.0) + float(w_val)
                 agreements.append(max(counts.values()) if counts else 1.0)
@@ -703,28 +714,23 @@ def _compute_rubin_column_variability(
 
 def _evaluate_collapsed_ect_fidelity(
     collapsed_df: pd.DataFrame,
-    standardized_candidates: list[np.ndarray],
-    weights: np.ndarray,
+    preprocessor: Any,
     magic_estimator: Any,
     median_vec: np.ndarray,
     medoid_dist: float,
-) -> tuple[float, float, bool]:
+) -> tuple[float | None, float | None, bool]:
     """
     Compute the ECT signature of the collapsed representation and check whether
     linear pooling stayed on the manifold (manifold_convexity_ratio <= 1.05).
     """
-    active_idxs = [i for i, w in enumerate(weights) if w > 1e-12]
-    if len(active_idxs) == 1 or magic_estimator is None or not standardized_candidates:
-        return medoid_dist, 1.0, False
+    if magic_estimator is None or preprocessor is None:
+        return None, None, False
 
     try:
-        active_w = weights[active_idxs]
-        active_w = active_w / np.sum(active_w)
-        Z_collapsed = np.zeros_like(standardized_candidates[0], dtype=float)
-        for idx, w_val in zip(active_idxs, active_w):
-            Z_collapsed += float(w_val) * np.asarray(
-                standardized_candidates[idx], dtype=float
-            )
+        Z_collapsed = preprocessor.transform(collapsed_df)
+        if hasattr(Z_collapsed, "toarray"):
+            Z_collapsed = Z_collapsed.toarray()
+        Z_collapsed = np.asarray(Z_collapsed, dtype=float)
         psi_collapsed_list = magic_estimator.generate([Z_collapsed])
         psi_collapsed = np.asarray(psi_collapsed_list[0], dtype=float).reshape(-1)
         collapsed_dist = float(np.linalg.norm(psi_collapsed - median_vec))
@@ -732,7 +738,7 @@ def _evaluate_collapsed_ect_fidelity(
         ratio = float(collapsed_dist / denom)
         return collapsed_dist, ratio, bool(ratio > 1.05)
     except (ValueError, RuntimeError, TypeError, AttributeError):
-        return medoid_dist, 1.0, False
+        return None, None, False
 
 
 def collapse_ect_ensemble(
@@ -748,12 +754,17 @@ def collapse_ect_ensemble(
     standardized_candidates: list[np.ndarray] | None = None,
     candidate_metadata: list[dict[str, Any]] | None = None,
     magic_estimator: Any = None,
+    preprocessor: Any = None,
     variable_bounds: dict[str, Any] | None = None,
 ) -> ECTCollapseResult:
     """
     Collapse an ensemble of candidate imputations {X^(1), ..., X^(M)} using their
     ECT signatures {Psi_1, ..., Psi_M} and return the collapsed DataFrame plus
     topological fidelity and Rubin representational variability diagnostics.
+
+    Pooling fidelity requires the fitted ``preprocessor`` and ``magic_estimator``;
+    distances and ratios are ``None`` when unavailable. ``standardized_candidates``
+    is retained for compatibility but is not averaged to approximate returned data.
     """
     if not candidates or not descriptors:
         raise ValueError("candidates and descriptors must be non-empty.")
@@ -793,15 +804,14 @@ def collapse_ect_ensemble(
             variable_bounds=variable_bounds,
         )
         active_idxs = [i for i, val in enumerate(w) if val > 1e-12]
-        if len(active_idxs) == 1:
+        if len(active_idxs) == 1 and df_c.equals(candidates[active_idxs[0]]):
             c_dist = float(dists_to_median[active_idxs[0]])
             c_ratio = float(c_dist / max(medoid_dist, 1e-6))
             warn = False
         else:
             c_dist, c_ratio, warn = _evaluate_collapsed_ect_fidelity(
                 df_c,
-                standardized_candidates or [],
-                w,
+                preprocessor,
                 magic_estimator,
                 median_vec,
                 medoid_dist,
@@ -822,7 +832,7 @@ def collapse_ect_ensemble(
         )
         eff_n = 1.0
 
-    comparison_table: list[dict[str, Any]] = []
+    comparison_table = []
     if compare_all:
         for strat_name in COLLAPSE_STRATEGIES:
             _, w_s, idx_s, dist_s, ratio_s, warn_s = _run_single(strat_name)
@@ -833,8 +843,12 @@ def collapse_ect_ensemble(
                     "kind": COLLAPSE_STRATEGIES[strat_name]["kind"],
                     "representative_index": int(idx_s),
                     "effective_ensemble_size": round(eff_s, 3),
-                    "ect_distance_to_median": round(dist_s, 6),
-                    "manifold_convexity_ratio": round(ratio_s, 4),
+                    "ect_distance_to_median": round(dist_s, 6)
+                    if dist_s is not None
+                    else None,
+                    "manifold_convexity_ratio": round(ratio_s, 4)
+                    if ratio_s is not None
+                    else None,
                     "non_convex_manifold_warning": warn_s,
                 }
             )
@@ -849,9 +863,11 @@ def collapse_ect_ensemble(
         selected_index=int(selected_index),
         weights=[round(float(x), 6) for x in weights.tolist()],
         effective_ensemble_size=round(eff_n, 4),
-        ect_distance_to_median=round(ect_dist, 6),
+        ect_distance_to_median=round(ect_dist, 6) if ect_dist is not None else None,
         medoid_ect_distance_to_median=round(medoid_dist, 6),
-        manifold_convexity_ratio=round(conv_ratio, 4),
+        manifold_convexity_ratio=round(conv_ratio, 4)
+        if conv_ratio is not None
+        else None,
         non_convex_manifold_warning=non_convex_warn,
         distribution_summary=dist_info,
         column_variability=col_variability,
