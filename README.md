@@ -64,9 +64,9 @@ Example Claude Desktop config (`~/Library/Application Support/Claude/claude_desk
 }
 ```
 
-Key tools: `ingest_dataset`, `characterize_dataset`, `profile_predictability`, `get_research_template`, `recommend_grid`, `list_grids`, `create_config`, `validate_config`, `run_imputation_sweep`, `diagnose_sweep`, `list_collapse_strategies`, `inspect_ect_distribution`, `collapse_ensemble`, `export_imputed_data`.
+Key tools: `ingest_dataset`, `characterize_dataset`, `profile_predictability`, `generate_research_template`, `recommend_grid`, `list_grids`, `create_config`, `validate_config`, `run_imputation_sweep`, `diagnose_sweep`, `list_collapse_strategies`, `inspect_ect_distribution`, `collapse_ensemble`, `export_imputed_data`.
 
-Agents can read `phil://docs/imputation-matrix` for grid comparison metadata, use `profile_predictability` + `get_research_template` to separate empirically predictable columns from domain/literature priors (`DomainKnowledge`), and compare ECT signature collapse strategies (`barycenter`, `trimmed_barycenter`, `frechet_medoid`, `euclidean_medoid`, `mode_medoid`, `cluster_barycenter`, `auto`). Polars users write to Parquet and ingest the file path.
+Agents can read `phil://docs/imputation-matrix` for grid comparison metadata, use `profile_predictability` + `generate_research_template` to separate empirically predictable columns from domain/literature priors (`DomainKnowledge`), and compare ECT signature collapse strategies (`barycenter`, `trimmed_barycenter`, `frechet_medoid`, `euclidean_medoid`, `mode_medoid`, `cluster_barycenter`, `auto`). Polars users write to Parquet and ingest the file path.
 
 See [`docs/source/userGuides/mcp.rst`](docs/source/userGuides/mcp.rst) for the full tool table and example dialog. Local end-to-end testing: [`demos/medical`](demos/medical/README.md).
 

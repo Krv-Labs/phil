@@ -203,19 +203,19 @@ chains them together:
    * - **probe_columns**
      - Deep per-column inspection for up to 20 columns at a time: sample values, top frequencies, basic numeric statistics.
    * - **profile_predictability**
-     - Cross-validated empirical predictability ($R^2$ for numeric, accuracy lift for categorical) of each incomplete column from observed features, classifying columns into ``iterative_model`` vs ``distribution_prior``.
-   * - **get_research_template**
-     - Generates a guided YAML ``domain_knowledge`` worksheet and structured literature-search queries for weakly correlated incomplete columns, ready to pass to ``create_config`` or ``refine_active_config``.
+     - Cross-validated empirical predictability (R² for numeric, balanced accuracy for categorical) of each incomplete column, with predictor rankings, missingness drivers, and high/moderate/low predictability tiers.
+   * - **generate_research_template**
+     - Generates a YAML ``domain_knowledge`` worksheet and structured literature questions for incomplete columns, and stores the template as the active config. Populate the priors and citations before validating and running it.
    * - **recommend_grid**
      - Rule-based grid recommendation from dataset scale, categorical cardinality, and missingness. Returns a concrete grid, suggested ``samples``, warnings, and rationale.
    * - **list_grids**
-     - Enumerates the named ``GridGallery`` entries (``default``, ``sampling``, ``finance``, ``healthcare``, ``marketing``, ``engineering``, ``domain_guided``) with declarative metadata (intent, suitability, affinity, time complexity, scale limits).
+     - Enumerates the named ``GridGallery`` entries (``default``, ``sampling``, ``finance``, ``healthcare``, ``marketing``, ``engineering``) with declarative metadata (intent, suitability, affinity, time complexity, scale limits).
    * - **create_config**
-     - Materializes a canonical YAML config tailored to a ``dataset_id``, grid choice, ``collapse_strategy``, and optional ``domain_knowledge``. Stores it on the session so subsequent ``refine_active_config`` / ``run_imputation_sweep`` calls can omit it.
+     - Materializes a canonical YAML config tailored to a ``dataset_id`` and grid choice. Stores it on the session so subsequent ``refine_active_config`` / ``run_imputation_sweep`` calls can omit it. Set collapse options and domain priors with ``refine_active_config``.
    * - **validate_config**
      - Validates and normalizes a config YAML, returning structured issues if anything is off. Rejects fenced Markdown blocks to prevent silent parse failures.
    * - **refine_config / refine_active_config**
-     - Apply dotted-path overrides (e.g. ``imputation.samples=50`` or ``imputation.collapse_strategy=trimmed_barycenter``) to an explicit or session config. Unknown keys raise structured errors with the valid path list.
+     - Apply dotted-path overrides (e.g. ``imputation.samples=50`` or ``magic.collapse_strategy=trimmed_barycenter``) to an explicit or session config. Supply domain priors under ``imputation.domain_knowledge``. Unknown keys raise structured errors with the valid path list.
    * - **get_active_config**
      - Returns the in-session config YAML, useful for inspection before running a sweep.
    * - **run_imputation_sweep**
@@ -223,9 +223,9 @@ chains them together:
    * - **diagnose_sweep**
      - Inspects a saved run's descriptor spread, selected index, per-method candidate counts, and Rubin variability. Use to decide whether to broaden the grid or raise ``samples``.
    * - **list_collapse_strategies**
-     - Lists all 7 ECT signature distribution collapse strategies (``barycenter``, ``trimmed_barycenter``, ``frechet_medoid``, ``euclidean_medoid``, ``mode_medoid``, ``cluster_barycenter``, ``auto``) with mathematical definitions and guidance on when to use each.
+     - Lists the 6 concrete ECT collapse strategies (``barycenter``, ``trimmed_barycenter``, ``frechet_medoid``, ``euclidean_medoid``, ``mode_medoid``, ``cluster_barycenter``), with definitions and guidance. Use ``auto`` to choose a strategy from distribution diagnostics.
    * - **inspect_ect_distribution**
-     - Analyzes the geometry of a sweep's ECT descriptor cloud (effective rank, skewness, outlier candidates, silhouette score, and recommended collapse strategy).
+     - Analyzes a sweep's ECT descriptor cloud (mean/median center shift, dispersion, outlier candidates, clusters, silhouette score, and recommended collapse strategy).
    * - **collapse_ensemble**
      - Applies or compares all 6 concrete ECT collapse strategies on a completed sweep (``compare_all=True``) and optionally updates the run's selected representative.
    * - **get_candidate_descriptors**
@@ -240,7 +240,7 @@ chains them together:
      - Writes the selected imputed DataFrame to disk; CSV / Parquet / Feather inferred from the extension.
 
 Resources
-^^^^^^^^^
+~~~~~~~~~
 
 * ``phil://docs/imputation-matrix`` — Markdown comparison matrix of built-in
   grids (domain, complexity, affinity, scale limits, estimator cost notes),
