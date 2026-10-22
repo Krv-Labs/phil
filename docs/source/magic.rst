@@ -7,3 +7,8 @@ Magic API
    :members:
    :undoc-members:
    :show-inheritance:
+
+.. automodule:: phil.magic.collapse
+   :members:
+   :undoc-members:
+   :show-inheritance:

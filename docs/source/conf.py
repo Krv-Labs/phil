@@ -38,8 +38,8 @@ html_theme = "furo"
 html_static_path = ["_static"]
 html_title = "Phil Documentation"
 html_theme_options = {
-    "light_logo": "logo.png",
-    "dark_logo": "logo-dark.png",
+    "light_logo": "logo.svg",
+    "dark_logo": "logo-dark.svg",
 }
 
 html_css_files = ["custom.css"]

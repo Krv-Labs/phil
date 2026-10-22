@@ -155,15 +155,12 @@ agent already knows the technical steps.
 Under the hood the agent will:
 
 1. **Ingest** — register the file as a stable ``dataset_id`` handle
-2. **Characterize** — summarize missingness, dtypes, and unique counts
-3. **List grids** — pick the named ``GridGallery`` strategy that fits
-   the data (``default``, ``finance``, ``healthcare``, ...)
-4. **Create a config** — generate canonical YAML with sensible defaults
-5. **Validate** — confirm the config parses and the dataset is reachable
-6. **Run the sweep** — fit each candidate imputation and score with ECT
-7. **Diagnose** — inspect descriptor spread and method counts; iterate
-   if the grid collapsed
-8. **Export** — write the selected imputed DataFrame to disk
+2. **Characterize & Profile Predictability** — summarize missingness, dtypes, and empirical predictability ($R^2$/accuracy) of each incomplete column
+3. **Literature Research Worksheet (optional)** — call ``get_research_template`` to separate empirically predictable columns (routed to ``MaskedIterativeImputer``) from weakly correlated columns that benefit from literature-backed ``CovariateDistributionImputer`` priors and physical ``VariableBounds``
+4. **List grids & Create config** — pick a named ``GridGallery`` strategy or merge domain priors into a canonical YAML config
+5. **Validate & Run the sweep** — fit each candidate imputation and score with ECT
+6. **Inspect & Collapse ECT Ensemble** — diagnose descriptor spread, inspect multimodality/outliers with ``inspect_ect_distribution``, and collapse the ensemble using the best strategy (`barycenter`, `trimmed_barycenter`, `frechet_medoid`, `euclidean_medoid`, `mode_medoid`, `cluster_barycenter`, or `auto`)
+7. **Export** — write the selected imputed DataFrame to disk
 
 Pandas and polars
 ~~~~~~~~~~~~~~~~~
@@ -205,22 +202,32 @@ chains them together:
      - Sparse per-column schema: dtype, n_unique, missing percent, plus aggregate row/column counts. Cheap and safe to call on wide datasets.
    * - **probe_columns**
      - Deep per-column inspection for up to 20 columns at a time: sample values, top frequencies, basic numeric statistics.
+   * - **profile_predictability**
+     - Cross-validated empirical predictability (R² for numeric, balanced accuracy for categorical) of each incomplete column, with predictor rankings, missingness drivers, and high/moderate/low predictability tiers.
+   * - **generate_research_template**
+     - Generates a YAML ``domain_knowledge`` worksheet and structured literature questions for incomplete columns, and stores the template as the active config. Populate the priors and citations before validating and running it.
    * - **recommend_grid**
      - Rule-based grid recommendation from dataset scale, categorical cardinality, and missingness. Returns a concrete grid, suggested ``samples``, warnings, and rationale.
    * - **list_grids**
      - Enumerates the named ``GridGallery`` entries (``default``, ``sampling``, ``finance``, ``healthcare``, ``marketing``, ``engineering``) with declarative metadata (intent, suitability, affinity, time complexity, scale limits).
    * - **create_config**
-     - Materializes a canonical YAML config tailored to a ``dataset_id`` and grid choice. Stores it on the session so subsequent ``refine_active_config`` / ``run_imputation_sweep`` calls can omit it.
+     - Materializes a canonical YAML config tailored to a ``dataset_id`` and grid choice. Stores it on the session so subsequent ``refine_active_config`` / ``run_imputation_sweep`` calls can omit it. Set collapse options and domain priors with ``refine_active_config``.
    * - **validate_config**
      - Validates and normalizes a config YAML, returning structured issues if anything is off. Rejects fenced Markdown blocks to prevent silent parse failures.
    * - **refine_config / refine_active_config**
-     - Apply dotted-path overrides (e.g. ``imputation.samples=50``) to an explicit or session config. Unknown keys raise structured errors with the valid path list.
+     - Apply dotted-path overrides (e.g. ``imputation.samples=50`` or ``magic.collapse_strategy=trimmed_barycenter``) to an explicit or session config. Supply domain priors under ``imputation.domain_knowledge``. Unknown keys raise structured errors with the valid path list.
    * - **get_active_config**
      - Returns the in-session config YAML, useful for inspection before running a sweep.
    * - **run_imputation_sweep**
-     - The headline tool: fits the candidate grid, scores each with the ECT magic method, selects the representative, and persists a ``RunRecord`` plus a markdown diff against the previous run.
+     - The headline tool: fits the candidate grid, scores each with the ECT magic method, selects the representative via the configured ``collapse_strategy``, and persists a ``RunRecord`` plus Rubin's Rules variability and a markdown diff against the previous run.
    * - **diagnose_sweep**
-     - Inspects a saved run's descriptor spread, selected index, and per-method candidate counts. Use to decide whether to broaden the grid or raise ``samples``.
+     - Inspects a saved run's descriptor spread, selected index, per-method candidate counts, and Rubin variability. Use to decide whether to broaden the grid or raise ``samples``.
+   * - **list_collapse_strategies**
+     - Lists the 6 concrete ECT collapse strategies (``barycenter``, ``trimmed_barycenter``, ``frechet_medoid``, ``euclidean_medoid``, ``mode_medoid``, ``cluster_barycenter``), with definitions and guidance. Use ``auto`` to choose a strategy from distribution diagnostics.
+   * - **inspect_ect_distribution**
+     - Analyzes a sweep's ECT descriptor cloud (mean/median center shift, dispersion, outlier candidates, clusters, silhouette score, and recommended collapse strategy).
+   * - **collapse_ensemble**
+     - Applies or compares all 6 concrete ECT collapse strategies on a completed sweep (``compare_all=True``) and optionally updates the run's selected representative.
    * - **get_candidate_descriptors**
      - Returns the top-k candidates ranked by closeness to the mean descriptor, including the selected index.
    * - **compare_sweeps**
@@ -233,7 +240,7 @@ chains them together:
      - Writes the selected imputed DataFrame to disk; CSV / Parquet / Feather inferred from the extension.
 
 Resources
-^^^^^^^^^
+~~~~~~~~~
 
 * ``phil://docs/imputation-matrix`` — Markdown comparison matrix of built-in
   grids (domain, complexity, affinity, scale limits, estimator cost notes),

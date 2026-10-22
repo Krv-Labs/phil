@@ -7,6 +7,11 @@ Configuration
    :undoc-members:
    :show-inheritance:
 
+.. automodule:: phil.imputation
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. automodule:: phil.gallery
    :members:
    :undoc-members:

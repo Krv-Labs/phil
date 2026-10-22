@@ -1,6 +1,14 @@
-# Phil
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/source/_static/phil-logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/source/_static/phil-logo.svg">
+    <img src="docs/source/_static/phil-logo.svg" alt="Phil" width="400">
+  </picture>
+</p>
 
-<p align="left">
+<h3 align="center">representation-guided imputation for missing tabular data</h3>
+
+<p align="center">
   <a href="https://pypi.org/project/philler/"><img src="https://img.shields.io/pypi/v/philler?color=3776AB&logo=python&logoColor=ffd43b" alt="PyPI"></a>
   <a href="https://pypi.org/project/philler/"><img src="https://img.shields.io/pypi/pyversions/philler" alt="Python versions"></a>
   <a href="https://github.com/Krv-Labs/phil/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Krv-Labs/phil" alt="License"></a>
@@ -56,9 +64,9 @@ Example Claude Desktop config (`~/Library/Application Support/Claude/claude_desk
 }
 ```
 
-Key tools: `ingest_dataset`, `characterize_dataset`, `recommend_grid`, `list_grids`, `create_config`, `validate_config`, `run_imputation_sweep`, `diagnose_sweep`, `export_imputed_data`.
+Key tools: `ingest_dataset`, `characterize_dataset`, `profile_predictability`, `generate_research_template`, `recommend_grid`, `list_grids`, `create_config`, `validate_config`, `run_imputation_sweep`, `diagnose_sweep`, `list_collapse_strategies`, `inspect_ect_distribution`, `collapse_ensemble`, `export_imputed_data`.
 
-Agents can read `phil://docs/imputation-matrix` for grid comparison metadata. Polars users write to Parquet and ingest the file path.
+Agents can read `phil://docs/imputation-matrix` for grid comparison metadata, use `profile_predictability` + `generate_research_template` to separate empirically predictable columns from domain/literature priors (`DomainKnowledge`), and compare ECT signature collapse strategies (`barycenter`, `trimmed_barycenter`, `frechet_medoid`, `euclidean_medoid`, `mode_medoid`, `cluster_barycenter`, `auto`). Polars users write to Parquet and ingest the file path.
 
 See [`docs/source/userGuides/mcp.rst`](docs/source/userGuides/mcp.rst) for the full tool table and example dialog. Local end-to-end testing: [`demos/medical`](demos/medical/README.md).
 
