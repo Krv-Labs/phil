@@ -10,6 +10,7 @@ sklearn objects (estimators, ParameterGrids) are constructed for the agent.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from math import isfinite
 from typing import Any
 
 import yaml
@@ -28,9 +29,7 @@ from phil.magic import COLLAPSE_STRATEGIES, ECTConfig
 
 # Derived from gallery.GRID_METADATA so MCP blurbs cannot drift from the
 # declarative metadata source of truth.
-GRID_INTENTS: dict[str, str] = {
-    name: meta.intent for name, meta in GRID_METADATA.items()
-}
+GRID_INTENTS = {name: meta.intent for name, meta in GRID_METADATA.items()}
 
 _ALLOWED_TOP_LEVEL = {"run", "imputation", "magic", "output"}
 _ALLOWED_RUN = {"name", "data"}
@@ -560,6 +559,29 @@ def _validate_magic(section: Any, issues: list[ValidationIssue]) -> None:
                 received=collapse_strategy,
             )
         )
+    for key in ("temperature", "trim_quantile"):
+        if key not in section:
+            continue
+        value = section[key]
+        valid = (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and isfinite(value)
+        )
+        valid = valid and (value > 0 if key == "temperature" else 0 <= value <= 0.8)
+        if not valid:
+            issues.append(
+                ValidationIssue(
+                    path=f"$.magic.{key}",
+                    message=f"{key} must be a finite number "
+                    + (
+                        "greater than zero."
+                        if key == "temperature"
+                        else "between 0 and 0.8."
+                    ),
+                    received=value,
+                )
+            )
 
 
 def _validate_output(section: Any, issues: list[ValidationIssue]) -> None:
@@ -600,7 +622,7 @@ def render_validation_report(report: ValidationReport) -> str:
     """Render a validation report as a JSON-compatible dict-string."""
     import json
 
-    payload: dict[str, Any] = {
+    payload = {
         "status": "ok" if report.ok else "error",
         "resolved_dataset_path": report.resolved_dataset_path,
     }
@@ -676,7 +698,7 @@ def _get_dotted(obj: dict[str, Any], dotted: str) -> Any:
 
 def _set_dotted(obj: dict[str, Any], dotted: str, value: Any) -> None:
     parts = dotted.split(".")
-    cursor = obj
+    cursor: Any = obj
     for part in parts[:-1]:
         nxt = cursor.get(part)
         if not isinstance(nxt, dict):
@@ -766,7 +788,7 @@ def config_to_phil_kwargs(config_yaml: str) -> dict[str, Any]:
 
     if grid_name == "custom":
         custom = imputation.get("custom") or {}
-        param_grid: Any = ImputationConfig(
+        param_grid = ImputationConfig(
             methods=list(custom["methods"]),
             modules=list(custom["modules"]),
             grids=[
@@ -823,7 +845,7 @@ def list_builtin_grids() -> list[dict[str, Any]]:
     for name in sorted(_BUILTIN_GRIDS):
         grid: ImputationConfig = GridGallery.get(name)
         meta = GRID_METADATA.get(name)
-        entry: dict[str, Any] = {
+        entry = {
             "name": name,
             "intent": GRID_INTENTS.get(name, ""),
             "methods": list(grid.methods),

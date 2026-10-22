@@ -29,7 +29,7 @@ _TOKEN_RE = re.compile(r"^tok_[0-9a-fA-F]{8,}$")
 
 def _detect_identifier_or_token_columns(df: pd.DataFrame) -> list[str]:
     """Identify high-cardinality string/token identifier columns (e.g. Phirewall tok_... vaults)."""
-    id_cols: list[str] = []
+    id_cols = []
     n_rows = len(df)
     if n_rows == 0:
         return id_cols
@@ -56,8 +56,8 @@ def _encode_feature_matrix(
     df: pd.DataFrame, feature_cols: list[str]
 ) -> tuple[np.ndarray, list[str]]:
     """Convert a subset of DataFrame columns to a simple imputed numeric matrix for probing."""
-    valid_cols: list[str] = []
-    arrays: list[np.ndarray] = []
+    valid_cols = []
+    arrays = []
 
     for col in feature_cols:
         series = df[col]
@@ -218,7 +218,7 @@ def _probe_missingness_mechanism(
             importances = np.zeros(X_other.shape[1], dtype=float)
 
     driver_order = np.argsort(importances)[::-1]
-    drivers: list[dict[str, Any]] = []
+    drivers = []
     for idx in driver_order[:5]:
         imp = float(importances[idx])
         if imp <= 0.0:
@@ -246,6 +246,53 @@ def _probe_missingness_mechanism(
     }
 
 
+def _rank_predictors(
+    X: np.ndarray,
+    y: np.ndarray,
+    columns: list[str],
+    is_numeric: bool,
+    random_state: int,
+) -> list[dict[str, Any]]:
+    """Rank predictors using mutual information and tree importance."""
+    mutual_information = mutual_info_regression if is_numeric else mutual_info_classif
+    model_type = ExtraTreesRegressor if is_numeric else ExtraTreesClassifier
+    try:
+        mi = mutual_information(
+            X, y, n_neighbors=min(3, max(1, len(y) - 1)), random_state=random_state
+        )
+    except (ValueError, RuntimeError):
+        mi = np.zeros(X.shape[1], dtype=float)
+    try:
+        model = model_type(n_estimators=30, max_depth=6, random_state=random_state)
+        model.fit(X, y)
+        tree_importance = np.asarray(model.feature_importances_, dtype=float)
+    except (ValueError, RuntimeError):
+        tree_importance = np.zeros(X.shape[1], dtype=float)
+
+    mi_normalized = mi / (np.max(mi) if np.max(mi) > 0 else 1.0)
+    combined = 0.5 * mi_normalized + 0.5 * tree_importance
+    predictors = []
+    for idx in np.argsort(combined)[::-1][:5]:
+        predictor = {
+            "column": columns[int(idx)],
+            "combined_importance": round(float(combined[idx]), 4),
+            "mutual_information": round(float(mi[idx]), 4),
+            "tree_importance": round(float(tree_importance[idx]), 4),
+        }
+        if is_numeric:
+            x = X[:, idx]
+            pearson = spearman = 0.0
+            if np.std(x) > 0 and np.std(y) > 0:
+                pearson = float(np.corrcoef(x, y)[0, 1])
+                spearman = float(stats.spearmanr(x, y).statistic)
+            predictor["pearson_r"] = round(pearson if np.isfinite(pearson) else 0.0, 4)
+            predictor["spearman_r"] = round(
+                spearman if np.isfinite(spearman) else 0.0, 4
+            )
+        predictors.append(predictor)
+    return predictors
+
+
 def profile_predictability(
     df: pd.DataFrame,
     target_columns: list[str] | None = None,
@@ -270,7 +317,7 @@ def profile_predictability(
     else:
         targets = [str(c) for c in target_columns if c in df.columns]
 
-    feature_profiles: dict[str, Any] = {}
+    feature_profiles = {}
 
     for col in targets:
         series = df[col]
@@ -293,7 +340,7 @@ def profile_predictability(
         linear_score = 0.0
         nonlinear_score = 0.0
         metric_name = "r2" if is_numeric else "balanced_accuracy"
-        top_predictors: list[dict[str, Any]] = []
+        top_predictors = []
 
         if n_obs >= 6 and X_obs.shape[1] > 0:
             with warnings.catch_warnings():
@@ -332,61 +379,9 @@ def profile_predictability(
                         except (ValueError, RuntimeError):
                             nonlinear_score = 0.0
 
-                        # Predictor ranking via MI + ExtraTrees + Pearson/Spearman
-                        try:
-                            mi = mutual_info_regression(
-                                X_obs,
-                                y_obs,
-                                n_neighbors=min(3, max(1, n_obs - 1)),
-                                random_state=random_state,
-                            )
-                        except (ValueError, RuntimeError):
-                            mi = np.zeros(X_obs.shape[1], dtype=float)
-                        try:
-                            nonlin_model.fit(X_obs, y_obs)
-                            tree_imp = np.asarray(
-                                nonlin_model.feature_importances_, dtype=float
-                            )
-                        except (ValueError, RuntimeError):
-                            tree_imp = np.zeros(X_obs.shape[1], dtype=float)
-
-                        mi_norm = mi / (np.max(mi) if np.max(mi) > 0 else 1.0)
-                        combined = 0.5 * mi_norm + 0.5 * tree_imp
-                        order = np.argsort(combined)[::-1]
-                        for idx in order[:5]:
-                            p_col = valid_cols[int(idx)]
-                            x_vec = X_obs[:, int(idx)]
-                            pearson_r = (
-                                float(np.corrcoef(x_vec, y_obs)[0, 1])
-                                if np.std(x_vec) > 0 and np.std(y_obs) > 0
-                                else 0.0
-                            )
-                            spearman_r_res = (
-                                stats.spearmanr(x_vec, y_obs).statistic
-                                if np.std(x_vec) > 0 and np.std(y_obs) > 0
-                                else 0.0
-                            )
-                            spearman_r = (
-                                float(spearman_r_res)
-                                if np.isfinite(spearman_r_res)
-                                else 0.0
-                            )
-                            top_predictors.append(
-                                {
-                                    "column": p_col,
-                                    "combined_importance": round(
-                                        float(combined[int(idx)]), 4
-                                    ),
-                                    "mutual_information": round(float(mi[int(idx)]), 4),
-                                    "tree_importance": round(
-                                        float(tree_imp[int(idx)]), 4
-                                    ),
-                                    "pearson_r": round(
-                                        pearson_r if np.isfinite(pearson_r) else 0.0, 4
-                                    ),
-                                    "spearman_r": round(spearman_r, 4),
-                                }
-                            )
+                        top_predictors = _rank_predictors(
+                            X_obs, y_obs, valid_cols, True, random_state
+                        )
                 else:
                     cat = pd.Categorical(series.loc[obs_mask])
                     y_obs = np.asarray(cat.codes, dtype=int)
@@ -437,45 +432,9 @@ def profile_predictability(
                             nonlinear_score = 0.0
 
                     if len(unique_classes) >= 2:
-                        try:
-                            mi = mutual_info_classif(
-                                X_obs,
-                                y_obs,
-                                n_neighbors=min(3, max(1, n_obs - 1)),
-                                random_state=random_state,
-                            )
-                        except (ValueError, RuntimeError):
-                            mi = np.zeros(X_obs.shape[1], dtype=float)
-                        try:
-                            nonlin_model = ExtraTreesClassifier(
-                                n_estimators=30,
-                                max_depth=6,
-                                random_state=random_state,
-                            )
-                            nonlin_model.fit(X_obs, y_obs)
-                            tree_imp = np.asarray(
-                                nonlin_model.feature_importances_, dtype=float
-                            )
-                        except (ValueError, RuntimeError):
-                            tree_imp = np.zeros(X_obs.shape[1], dtype=float)
-
-                        mi_norm = mi / (np.max(mi) if np.max(mi) > 0 else 1.0)
-                        combined = 0.5 * mi_norm + 0.5 * tree_imp
-                        order = np.argsort(combined)[::-1]
-                        for idx in order[:5]:
-                            p_col = valid_cols[int(idx)]
-                            top_predictors.append(
-                                {
-                                    "column": p_col,
-                                    "combined_importance": round(
-                                        float(combined[int(idx)]), 4
-                                    ),
-                                    "mutual_information": round(float(mi[int(idx)]), 4),
-                                    "tree_importance": round(
-                                        float(tree_imp[int(idx)]), 4
-                                    ),
-                                }
-                            )
+                        top_predictors = _rank_predictors(
+                            X_obs, y_obs, valid_cols, False, random_state
+                        )
 
         if not np.isfinite(linear_score):
             linear_score = 0.0
@@ -616,9 +575,9 @@ def build_research_worksheet(
         raise TypeError("df_or_profile must be a pandas DataFrame or profile dict.")
 
     feature_profiles = profile.get("feature_profiles", {})
-    research_cards: list[dict[str, Any]] = []
-    covariate_subsets_template: dict[str, Any] = {}
-    variable_bounds_template: dict[str, Any] = {}
+    research_cards = []
+    covariate_subsets_template = {}
+    variable_bounds_template = {}
 
     for col, fp in feature_profiles.items():
         top_preds = [p["column"] for p in fp.get("top_empirical_predictors", [])[:4]]
@@ -628,7 +587,7 @@ def build_research_worksheet(
                 :2
             ]
         ]
-        merged_predictors: list[str] = []
+        merged_predictors = []
         for candidate in top_preds + mar_drivers:
             if candidate not in merged_predictors and candidate != col:
                 merged_predictors.append(candidate)

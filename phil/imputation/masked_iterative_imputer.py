@@ -6,6 +6,7 @@ from sklearn.base import clone
 from sklearn.impute import IterativeImputer
 
 from phil.imputation.config import ESTIMATOR_MAP
+from phil.imputation.covariate_distribution import CovariateDistributionImputer
 
 
 class MaskedIterativeImputer(IterativeImputer):
@@ -143,29 +144,26 @@ class MaskedIterativeImputer(IterativeImputer):
                 original_neighbors.intersection(allowed_neighbors)
             )
 
-            if not restricted_neighbors:
-                restricted_neighbors = neighbor_feat_idx
-            else:
-                restricted_neighbors = np.array(sorted(restricted_neighbors), dtype=int)
+            if restricted_neighbors:
+                neighbor_feat_idx = np.array(sorted(restricted_neighbors), dtype=int)
 
-            try:
-                return super()._impute_one_feature(
-                    X_filled,
-                    mask_missing_values,
-                    feat_idx,
-                    restricted_neighbors,
-                    estimator=estimator,
-                    fit_mode=fit_mode,
-                    **extra_kwargs,
-                )
-            except TypeError:
-                return super()._impute_one_feature(
-                    X_filled,
-                    mask_missing_values,
-                    feat_idx,
-                    restricted_neighbors,
-                    estimator=estimator,
-                    fit_mode=fit_mode,
+        # Each regression sees a different ordered subset of predictors. Slice the
+        # full covariance before fitting and retain that estimator for transform.
+        if estimator is None and isinstance(
+            self._estimator, CovariateDistributionImputer
+        ):
+            covariance = self._estimator.covariance_matrix
+            if covariance is not None:
+                covariance = np.asarray(covariance, dtype=float)
+                if covariance.shape != (X_filled.shape[1], X_filled.shape[1]):
+                    raise ValueError(
+                        "Covariance matrix must match all imputer features."
+                    )
+                estimator = clone(self._estimator)
+                estimator.set_params(
+                    covariance_matrix=covariance[
+                        np.ix_(neighbor_feat_idx, neighbor_feat_idx)
+                    ]
                 )
 
         try:
