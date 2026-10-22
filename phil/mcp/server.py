@@ -27,7 +27,17 @@ import yaml
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 
+from phil.diagnostics import (
+    build_research_worksheet,
+)
+from phil.diagnostics import (
+    profile_predictability as _profile_predictability_df,
+)
 from phil.gallery import render_imputation_matrix
+from phil.magic import (
+    COLLAPSE_STRATEGIES,
+    analyze_ect_distribution,
+)
 from phil.mcp.config import (
     GRID_INTENTS,
     apply_overrides,
@@ -150,6 +160,11 @@ class _PhilSession:
     active_config_dataset_id: str | None = None
     categorical_codebooks: dict[str, list[str]] = field(default_factory=dict)
     dropped_columns: list[str] = field(default_factory=list)
+    dropped_data: pd.DataFrame | None = None
+    original_column_order: list[str] = field(default_factory=list)
+    prepared_data: pd.DataFrame | None = None
+    last_collapse_report: dict[str, Any] | None = None
+    imputed_cache_path: str | None = None
 
     def calculate_memory_mb(self) -> float:
         bytes_total = 0
@@ -170,7 +185,27 @@ _MAX_SESSIONS = int(os.environ.get("PHIL_MAX_SESSIONS", "3"))
 def _session_key(ctx: Context | None) -> str:
     if ctx is None:
         return "default"
-    return ctx.session_id or "default"
+    request_ctx = getattr(ctx, "request_context", None)
+    if request_ctx is not None:
+        session = getattr(request_ctx, "session", None)
+        connection = getattr(session, "_connection", None)
+        if connection is not None and getattr(connection, "session_id", None):
+            return str(connection.session_id)
+        request = getattr(request_ctx, "request", None)
+        if request is not None and hasattr(request, "headers"):
+            header_sid = request.headers.get("mcp-session-id")
+            if header_sid:
+                return str(header_sid)
+        # In FastMCP >= 4 / MCP SDK v2 (2026-07-28 protocol), stdio and in-memory
+        # transports construct a fresh Connection per request with connection.session_id=None,
+        # causing ctx.session_id to mint a new UUID per tool call. Fall back to the
+        # single-client stdio session ("default") when no negotiated HTTP session ID exists.
+        if connection is not None and getattr(connection, "session_id", None) is None:
+            return "default"
+    try:
+        return ctx.session_id or "default"
+    except RuntimeError:
+        return "default"
 
 
 def _get_session(ctx: Context | None) -> _PhilSession:
@@ -452,6 +487,14 @@ async def ingest_dataset(path: str, ctx: Context = None) -> str:
         return mcp_error("ingest_dataset", str(e))
 
 
+def _is_upload_disabled() -> bool:
+    return os.environ.get("PHIL_DISABLE_UPLOAD", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
 @mcp.tool()
 async def begin_dataset_upload(
     filename: str,
@@ -463,6 +506,13 @@ async def begin_dataset_upload(
     by path. Use this for larger sandboxed uploads, then append chunks
     and finalize to obtain a dataset_id.
     """
+    if _is_upload_disabled():
+        return mcp_error(
+            "begin_dataset_upload",
+            "Dataset uploads are disabled by PHIL_DISABLE_UPLOAD=1.",
+            error_code="UPLOAD_DISABLED",
+            agent_action="Use ingest_dataset(path) with a host-visible dataset path.",
+        )
     try:
         record = registry.begin_upload(filename, media_type=media_type)
         return json.dumps(dataclasses.asdict(record), indent=2)
@@ -481,6 +531,13 @@ async def append_dataset_chunk(
     Append one chunk to a staged dataset upload. Use base64 encoding by
     default to avoid newline and control-character corruption.
     """
+    if _is_upload_disabled():
+        return mcp_error(
+            "append_dataset_chunk",
+            "Dataset uploads are disabled by PHIL_DISABLE_UPLOAD=1.",
+            error_code="UPLOAD_DISABLED",
+            agent_action="Use ingest_dataset(path) with a host-visible dataset path.",
+        )
     try:
         if encoding == "base64":
             try:
@@ -517,6 +574,13 @@ async def finalize_dataset_upload(upload_id: str, ctx: Context = None) -> str:
     Finalize a staged upload and register it as a dataset_id for
     downstream tools.
     """
+    if _is_upload_disabled():
+        return mcp_error(
+            "finalize_dataset_upload",
+            "Dataset uploads are disabled by PHIL_DISABLE_UPLOAD=1.",
+            error_code="UPLOAD_DISABLED",
+            agent_action="Use ingest_dataset(path) with a host-visible dataset path.",
+        )
     try:
         record = registry.finalize_upload(upload_id)
         if record is None:
@@ -614,6 +678,7 @@ async def probe_columns(
         df, normalized_path = await _load_session_dataframe(
             session, dataset_id=dataset_id
         )
+        confined = _is_upload_disabled()
         profiles: list[dict[str, Any]] = []
         for col in columns:
             if col not in df.columns:
@@ -621,10 +686,11 @@ async def probe_columns(
                 continue
             series = df[col]
             non_null = series.dropna()
-            sample_values = non_null.head(5).tolist()
-            top_values = (
-                non_null.value_counts().head(5).to_dict() if len(non_null) else {}
-            )
+            sample_values = [] if confined else non_null.head(5).tolist()
+            vc = non_null.value_counts() if len(non_null) else pd.Series(dtype=int)
+            if confined and len(vc):
+                vc = vc[vc >= 5]
+            top_values = vc.head(5).to_dict() if len(vc) else {}
             profile: dict[str, Any] = {
                 "name": str(col),
                 "dtype": str(series.dtype),
@@ -660,6 +726,88 @@ async def probe_columns(
         return unknown_handle_error("probe_columns", "dataset_id", dataset_id)
     except Exception as e:  # noqa: BLE001
         return mcp_error("probe_columns", str(e))
+
+
+@mcp.tool()
+async def profile_predictability(
+    dataset_id: str,
+    target_columns: list[str] | None = None,
+    ctx: Context = None,
+) -> str:
+    """
+    Compute empirical predictability and missingness diagnostics for columns
+    with missing values: CV R2/accuracy, top correlated predictors, MAR driver
+    scores, skewness, and outlier fraction. Contains zero built-in domain
+    knowledge; use these statistical facts to guide literature research.
+    """
+    try:
+        session = _get_session(ctx)
+        df, normalized_path = await _load_session_dataframe(
+            session, dataset_id=dataset_id
+        )
+        diagnostics = await asyncio.to_thread(
+            _profile_predictability_df, df, target_columns
+        )
+        return json.dumps(
+            {
+                "status": "ok",
+                "dataset_id": dataset_id,
+                "data_path": normalized_path,
+                **diagnostics,
+            },
+            indent=2,
+        )
+    except LookupError:
+        return unknown_handle_error("profile_predictability", "dataset_id", dataset_id)
+    except Exception as e:  # noqa: BLE001
+        return mcp_error("profile_predictability", str(e))
+
+
+@mcp.tool()
+async def generate_research_template(
+    dataset_id: str,
+    domain_context: str = "",
+    study_context: str = "",
+    target_columns: list[str] | None = None,
+    ctx: Context = None,
+) -> str:
+    """
+    Generate a structured Research Worksheet & YAML Config Template for
+    populating `imputation.domain_knowledge` (`covariate_subsets`,
+    `variable_bounds`, `covariance_matrix`, and required `citations`).
+    Phil stores zero domain knowledge itself; use this template to guide
+    literature search and populate the YAML config.
+    """
+    try:
+        session = _get_session(ctx)
+        df, normalized_path = await _load_session_dataframe(
+            session, dataset_id=dataset_id
+        )
+        diagnostics = await asyncio.to_thread(
+            _profile_predictability_df, df, target_columns
+        )
+        worksheet = build_research_worksheet(
+            diagnostics,
+            domain_context=domain_context or study_context,
+            data_path=normalized_path,
+        )
+        session.active_config_yaml = worksheet["config_yaml_template"]
+        session.active_config_dataset_id = dataset_id
+        return json.dumps(
+            {
+                "status": "ok",
+                "dataset_id": dataset_id,
+                "data_path": normalized_path,
+                **worksheet,
+            },
+            indent=2,
+        )
+    except LookupError:
+        return unknown_handle_error(
+            "generate_research_template", "dataset_id", dataset_id
+        )
+    except Exception as e:  # noqa: BLE001
+        return mcp_error("generate_research_template", str(e))
 
 
 def _coerce_jsonable(value: Any) -> Any:
@@ -780,6 +928,24 @@ def _decode_categorical_columns(
         restored.loc[is_observed] = [categories[idx] for idx in clipped]
         decoded[col] = restored
     return decoded
+
+
+def _reattach_dropped_columns(
+    imputed: pd.DataFrame,
+    dropped_data: pd.DataFrame | None,
+    original_column_order: list[str] | None = None,
+) -> pd.DataFrame:
+    if dropped_data is None or dropped_data.empty:
+        return imputed
+    combined = imputed.copy()
+    for col in dropped_data.columns:
+        if col not in combined.columns:
+            combined[col] = dropped_data[col].to_numpy()
+    if original_column_order:
+        ordered = [c for c in original_column_order if c in combined.columns]
+        remaining = [c for c in combined.columns if c not in ordered]
+        combined = combined[ordered + remaining]
+    return combined
 
 
 # ---------------------------------------------------------------------------
@@ -1132,6 +1298,9 @@ async def run_imputation_sweep(
                 magic=kwargs["magic"],
                 config=kwargs["config"],
                 random_state=kwargs["random_state"],
+                collapse_strategy=kwargs.get("collapse_strategy", "barycenter"),
+                temperature=kwargs.get("temperature"),
+                trim_quantile=kwargs.get("trim_quantile", 0.2),
             )
             progress_callback("imputing", 0.1)
             imputed = phil_obj.fit(prepared_df, max_iter=kwargs["max_iter"])
@@ -1160,12 +1329,26 @@ async def run_imputation_sweep(
             )
 
         imputed = _decode_categorical_columns(imputed, categorical_codebooks)
+        dropped_df = (
+            df[dropped_columns].copy()
+            if dropped_columns
+            else pd.DataFrame(index=df.index)
+        )
+        orig_order = [str(c) for c in df.columns]
+        imputed = _reattach_dropped_columns(imputed, dropped_df, orig_order)
 
         session.phil = phil_obj
         session.imputed = imputed
         session.descriptors = descriptors
         session.categorical_codebooks = categorical_codebooks
         session.dropped_columns = dropped_columns
+        session.dropped_data = dropped_df
+        session.original_column_order = orig_order
+        session.prepared_data = prepared_df
+        collapse_res = getattr(phil_obj, "collapse_result_", None)
+        session.last_collapse_report = (
+            collapse_res.to_report_dict() if collapse_res is not None else None
+        )
 
         stats = _descriptor_stats(descriptors)
         method_counts = _method_counts(phil_obj)
@@ -1214,9 +1397,20 @@ async def run_imputation_sweep(
                 "dropped_columns": dropped_columns,
                 "encoded_categorical_columns": sorted(categorical_codebooks.keys()),
                 "saved_config_path": saved_config_path,
+                "collapse_report": session.last_collapse_report,
             },
         )
         session.latest_run_id = record.run_id
+
+        cache_datasets_dir = registry.cache_dir / "datasets"
+        cache_datasets_dir.mkdir(parents=True, exist_ok=True)
+        ds_prefix = session.active_config_dataset_id or "dataset"
+        imputed_cache_file = (
+            cache_datasets_dir / f"{ds_prefix}_imputed_{record.run_id}.csv"
+        )
+        await asyncio.to_thread(_write_csv, imputed, str(imputed_cache_file))
+        session.imputed_cache_path = str(imputed_cache_file)
+
         sweep_record = SweepRecord(
             timestamp=time.time(),
             config_yaml=current_yaml,
@@ -1240,6 +1434,8 @@ async def run_imputation_sweep(
             "imputed_columns": imputed_columns,
             "config_yaml": current_yaml,
             "output_path": output_path,
+            "imputed_cache_path": session.imputed_cache_path,
+            "collapse_report": session.last_collapse_report,
             "saved_config_path": saved_config_path,
             "dropped_columns": dropped_columns,
             "encoded_categorical_columns": sorted(categorical_codebooks.keys()),
@@ -1321,6 +1517,163 @@ async def diagnose_sweep(run_id: str = "", ctx: Context = None) -> str:
         return json.dumps(payload, indent=2)
     except Exception as e:  # noqa: BLE001
         return mcp_error("diagnose_sweep", str(e))
+
+
+def _session_candidate_methods(session: _PhilSession) -> list[str]:
+    if session.phil is None:
+        return []
+    methods = getattr(session.phil, "candidate_methods_", None)
+    if methods:
+        return list(methods)
+    labels: list[str] = []
+    for pipe in getattr(session.phil, "selected_imputers", []):
+        try:
+            est = pipe["imputer"].estimator
+            labels.append(type(est).__name__ if est is not None else "DefaultIterative")
+        except (KeyError, AttributeError, TypeError):
+            labels.append("Unknown")
+    return labels
+
+
+@mcp.tool()
+async def list_collapse_strategies(ctx: Context = None) -> str:
+    """
+    List all supported ECT signature distribution collapse strategies and
+    their suitability for unimodal, heavy-tailed, multimodal, or non-convex
+    ensemble distributions.
+    """
+    return json.dumps(
+        {
+            "status": "ok",
+            "strategies": COLLAPSE_STRATEGIES,
+            "auto_mode": (
+                "Pass strategy='auto' to automatically select the strategy "
+                "recommended by analyze_ect_distribution based on outlier "
+                "count, silhouette score, and manifold convexity."
+            ),
+        },
+        indent=2,
+    )
+
+
+@mcp.tool()
+async def inspect_ect_distribution(run_id: str = "", ctx: Context = None) -> str:
+    """
+    Analyze the geometry of the cached ECT signature distribution
+    {Psi_1, ..., Psi_M} from the latest sweep: centroid/medoid indices,
+    outlier count, multimodal cluster count and silhouette score, effective
+    sample size, per-method L2 spread, and a recommended collapse strategy.
+    """
+    try:
+        session = _get_session(ctx)
+        if not session.descriptors or session.phil is None:
+            return mcp_error(
+                "inspect_ect_distribution",
+                "No descriptors cached in this session. Run a sweep first.",
+                error_code="NO_DESCRIPTORS",
+                agent_action="Call run_imputation_sweep first.",
+            )
+        if run_id and run_id != session.latest_run_id:
+            return mcp_error(
+                "inspect_ect_distribution",
+                "Requested run_id is not the latest in-session run.",
+                error_code="RUN_NOT_CACHED",
+                agent_action="Re-run the sweep before inspecting the in-session ECT distribution.",
+                details={"latest_run_id": session.latest_run_id},
+            )
+        candidate_methods = _session_candidate_methods(session)
+        diagnostics = await asyncio.to_thread(
+            analyze_ect_distribution,
+            session.descriptors,
+            candidate_methods=candidate_methods,
+        )
+        return json.dumps(
+            {
+                "status": "ok",
+                "run_id": session.latest_run_id,
+                **diagnostics,
+            },
+            indent=2,
+        )
+    except Exception as e:  # noqa: BLE001
+        return mcp_error("inspect_ect_distribution", str(e))
+
+
+@mcp.tool()
+async def collapse_ensemble(
+    strategy: str = "auto",
+    temperature: float | None = None,
+    trim_quantile: float = 0.2,
+    compare_all: bool = False,
+    ctx: Context = None,
+) -> str:
+    """
+    Re-collapse the cached ensemble of candidate imputations using the
+    chosen ECT signature navigation strategy (`barycenter`,
+    `trimmed_barycenter`, `frechet_medoid`, `euclidean_medoid`,
+    `mode_medoid`, `cluster_barycenter`, or `auto`) without re-fitting
+    any imputation models. Set `compare_all=True` to compare all strategies
+    side-by-side (including manifold_convexity_ratio and Rubin's uncertainty).
+    """
+    try:
+        session = _get_session(ctx)
+        if session.phil is None or not session.descriptors:
+            return mcp_error(
+                "collapse_ensemble",
+                "No imputation ensemble cached in this session. Run a sweep first.",
+                error_code="NO_ENSEMBLE_CACHED",
+                agent_action="Call run_imputation_sweep first.",
+            )
+        valid_strategies = set(COLLAPSE_STRATEGIES.keys()) | {"auto"}
+        if strategy not in valid_strategies:
+            return mcp_error(
+                "collapse_ensemble",
+                f"Unknown collapse strategy '{strategy}'.",
+                error_code="UNKNOWN_COLLAPSE_STRATEGY",
+                agent_action=f"Use one of {sorted(valid_strategies)}.",
+            )
+
+        def _do_collapse():
+            res = session.phil.collapse(
+                strategy=strategy,
+                temperature=temperature,
+                trim_quantile=trim_quantile,
+                compare_all=compare_all,
+            )
+            return res
+
+        collapse_res = await asyncio.to_thread(_do_collapse)
+        imputed = _decode_categorical_columns(
+            collapse_res.collapsed_df, session.categorical_codebooks
+        )
+        imputed = _reattach_dropped_columns(
+            imputed, session.dropped_data, session.original_column_order
+        )
+        session.imputed = imputed
+        session.last_collapse_report = collapse_res.to_report_dict()
+
+        if session.latest_run_id:
+            cache_datasets_dir = registry.cache_dir / "datasets"
+            cache_datasets_dir.mkdir(parents=True, exist_ok=True)
+            ds_prefix = session.active_config_dataset_id or "dataset"
+            imputed_cache_file = (
+                cache_datasets_dir / f"{ds_prefix}_imputed_{session.latest_run_id}.csv"
+            )
+            await asyncio.to_thread(_write_csv, imputed, str(imputed_cache_file))
+            session.imputed_cache_path = str(imputed_cache_file)
+
+        return json.dumps(
+            {
+                "status": "ok",
+                "run_id": session.latest_run_id,
+                "dataset_id": session.active_config_dataset_id,
+                "imputed_cache_path": session.imputed_cache_path,
+                "collapse_report": session.last_collapse_report,
+            },
+            indent=2,
+        )
+    except Exception as e:  # noqa: BLE001
+        return mcp_error("collapse_ensemble", str(e))
 
 
 @mcp.tool()

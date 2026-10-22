@@ -16,8 +16,15 @@ import yaml
 from sklearn.model_selection import ParameterGrid
 
 from phil.gallery import GRID_METADATA, GridGallery
-from phil.imputation import ImputationConfig
-from phil.magic import ECTConfig
+from phil.imputation import (
+    CovarianceMatrix,
+    CovariateSubset,
+    DomainKnowledge,
+    ImputationConfig,
+    VariableBounds,
+)
+from phil.imputation.config import ESTIMATOR_MAP
+from phil.magic import COLLAPSE_STRATEGIES, ECTConfig
 
 # Derived from gallery.GRID_METADATA so MCP blurbs cannot drift from the
 # declarative metadata source of truth.
@@ -47,10 +54,14 @@ _ALLOWED_MAGIC = {
     "scale",
     "normalize",
     "seed",
+    "collapse_strategy",
+    "temperature",
+    "trim_quantile",
 }
 _ALLOWED_OUTPUT = {"write_csv", "write_parquet"}
 
 _SUPPORTED_MAGIC_METHODS = {"ECT"}
+_SUPPORTED_COLLAPSE_STRATEGIES = set(COLLAPSE_STRATEGIES.keys()) | {"auto"}
 _BUILTIN_GRIDS = set(GRID_INTENTS.keys())
 
 
@@ -296,6 +307,78 @@ def _validate_imputation(section: Any, issues: list[ValidationIssue]) -> None:
                                     suggestion="Provide a list of citations justifying the chosen predictors.",
                                 )
                             )
+                        estimators = mapping.get("estimators")
+                        if estimators is not None and (
+                            not isinstance(estimators, list)
+                            or any(
+                                not isinstance(e, str) or e not in ESTIMATOR_MAP
+                                for e in estimators
+                            )
+                        ):
+                            issues.append(
+                                ValidationIssue(
+                                    path=f"$.imputation.domain_knowledge.covariate_subsets.{target}.estimators",
+                                    message=f"Estimators must be a list of valid estimator names: {sorted(ESTIMATOR_MAP.keys())}.",
+                                    received=estimators,
+                                )
+                            )
+                        sample_posterior = mapping.get("sample_posterior")
+                        if sample_posterior is not None and not isinstance(
+                            sample_posterior, bool
+                        ):
+                            issues.append(
+                                ValidationIssue(
+                                    path=f"$.imputation.domain_knowledge.covariate_subsets.{target}.sample_posterior",
+                                    message="'sample_posterior' must be a boolean.",
+                                    received=sample_posterior,
+                                )
+                            )
+            var_bounds = domain_knowledge.get("variable_bounds")
+            if var_bounds is not None:
+                if not isinstance(var_bounds, dict):
+                    issues.append(
+                        ValidationIssue(
+                            path="$.imputation.domain_knowledge.variable_bounds",
+                            message="Must be a mapping.",
+                        )
+                    )
+                else:
+                    for target, bmap in var_bounds.items():
+                        if not isinstance(bmap, dict):
+                            issues.append(
+                                ValidationIssue(
+                                    path=f"$.imputation.domain_knowledge.variable_bounds.{target}",
+                                    message="Must be a mapping.",
+                                )
+                            )
+                            continue
+                        if not bmap.get("citations"):
+                            issues.append(
+                                ValidationIssue(
+                                    path=f"$.imputation.domain_knowledge.variable_bounds.{target}.citations",
+                                    message="Citations are required when using variable_bounds.",
+                                    suggestion="Provide a list of citations justifying the domain bounds.",
+                                )
+                            )
+                        min_val = bmap.get("min_value")
+                        max_val = bmap.get("max_value")
+                        if (
+                            min_val is not None
+                            and max_val is not None
+                            and isinstance(min_val, (int, float))
+                            and isinstance(max_val, (int, float))
+                            and min_val > max_val
+                        ):
+                            issues.append(
+                                ValidationIssue(
+                                    path=f"$.imputation.domain_knowledge.variable_bounds.{target}",
+                                    message="min_value must be <= max_value.",
+                                    received={
+                                        "min_value": min_val,
+                                        "max_value": max_val,
+                                    },
+                                )
+                            )
             cov_matrix = domain_knowledge.get("covariance_matrix")
             if cov_matrix is not None:
                 if not isinstance(cov_matrix, dict):
@@ -464,6 +547,19 @@ def _validate_magic(section: Any, issues: list[ValidationIssue]) -> None:
                 expected=f"One of {sorted(_SUPPORTED_MAGIC_METHODS)}",
             )
         )
+    collapse_strategy = section.get("collapse_strategy")
+    if (
+        collapse_strategy is not None
+        and collapse_strategy not in _SUPPORTED_COLLAPSE_STRATEGIES
+    ):
+        issues.append(
+            ValidationIssue(
+                path="$.magic.collapse_strategy",
+                message=f"Unsupported collapse_strategy '{collapse_strategy}'.",
+                expected=f"One of {sorted(_SUPPORTED_COLLAPSE_STRATEGIES)}",
+                received=collapse_strategy,
+            )
+        )
 
 
 def _validate_output(section: Any, issues: list[ValidationIssue]) -> None:
@@ -590,6 +686,69 @@ def _set_dotted(obj: dict[str, Any], dotted: str, value: Any) -> None:
     cursor[parts[-1]] = value
 
 
+def _materialize_domain_knowledge(
+    raw_dk: dict[str, Any] | None,
+) -> DomainKnowledge | None:
+    if not raw_dk or not isinstance(raw_dk, dict):
+        return None
+    cov_subsets = None
+    if raw_dk.get("covariate_subsets"):
+        cov_subsets = {}
+        for target, mapping in raw_dk["covariate_subsets"].items():
+            if not isinstance(mapping, dict):
+                continue
+            cov_subsets[str(target)] = CovariateSubset(
+                predictors=[str(p) for p in mapping.get("predictors", [])],
+                citations=[str(c) for c in mapping.get("citations", [])],
+                estimators=(
+                    [str(e) for e in mapping["estimators"]]
+                    if mapping.get("estimators") is not None
+                    else None
+                ),
+                sample_posterior=bool(mapping.get("sample_posterior", False)),
+            )
+
+    var_bounds = None
+    if raw_dk.get("variable_bounds"):
+        var_bounds = {}
+        for target, bmap in raw_dk["variable_bounds"].items():
+            if not isinstance(bmap, dict):
+                continue
+            var_bounds[str(target)] = VariableBounds(
+                min_value=(
+                    float(bmap["min_value"])
+                    if bmap.get("min_value") is not None
+                    else None
+                ),
+                max_value=(
+                    float(bmap["max_value"])
+                    if bmap.get("max_value") is not None
+                    else None
+                ),
+                citations=[str(c) for c in bmap.get("citations", [])],
+            )
+
+    cov_matrix = None
+    if raw_dk.get("covariance_matrix") and isinstance(
+        raw_dk["covariance_matrix"], dict
+    ):
+        cm = raw_dk["covariance_matrix"]
+        if cm.get("matrix") and cm.get("citations"):
+            cov_matrix = CovarianceMatrix(
+                matrix=[[float(x) for x in row] for row in cm["matrix"]],
+                variables=[str(v) for v in cm.get("variables", [])],
+                citations=[str(c) for c in cm["citations"]],
+            )
+
+    if not cov_subsets and not var_bounds and not cov_matrix:
+        return None
+    return DomainKnowledge(
+        covariate_subsets=cov_subsets,
+        covariance_matrix=cov_matrix,
+        variable_bounds=var_bounds,
+    )
+
+
 def config_to_phil_kwargs(config_yaml: str) -> dict[str, Any]:
     """Materialize a validated config YAML into ``Phil`` constructor kwargs.
 
@@ -603,6 +762,8 @@ def config_to_phil_kwargs(config_yaml: str) -> dict[str, Any]:
 
     imputation = normalized["imputation"]
     grid_name = imputation.get("grid", "default")
+    domain_knowledge = _materialize_domain_knowledge(imputation.get("domain_knowledge"))
+
     if grid_name == "custom":
         custom = imputation.get("custom") or {}
         param_grid: Any = ImputationConfig(
@@ -611,6 +772,15 @@ def config_to_phil_kwargs(config_yaml: str) -> dict[str, Any]:
             grids=[
                 ParameterGrid(g) if isinstance(g, dict) else g for g in custom["grids"]
             ],
+            domain_knowledge=domain_knowledge,
+        )
+    elif domain_knowledge is not None:
+        base_grid = GridGallery.get(grid_name)
+        param_grid = ImputationConfig(
+            methods=list(base_grid.methods),
+            modules=list(base_grid.modules),
+            grids=list(base_grid.grids),
+            domain_knowledge=domain_knowledge,
         )
     else:
         param_grid = grid_name
@@ -635,6 +805,13 @@ def config_to_phil_kwargs(config_yaml: str) -> dict[str, Any]:
         "drop_cols": list(imputation.get("drop_cols", [])),
         "missingness_thresh": imputation.get("missingness_thresh"),
         "encode_categoricals": bool(imputation.get("encode_categoricals", True)),
+        "collapse_strategy": str(magic_section.get("collapse_strategy", "barycenter")),
+        "temperature": (
+            float(magic_section["temperature"])
+            if magic_section.get("temperature") is not None
+            else None
+        ),
+        "trim_quantile": float(magic_section.get("trim_quantile", 0.2)),
         "run_name": normalized.get("run", {}).get("name") or "phil_sweep",
         "data_path": normalized.get("run", {}).get("data") or "",
     }

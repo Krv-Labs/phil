@@ -14,7 +14,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-_CACHE_DIR = Path(tempfile.gettempdir()) / "phil_mcp"
+_CACHE_DIR = Path(
+    os.environ.get("PHIL_DATASETS_DIR") or str(Path(tempfile.gettempdir()) / "phil_mcp")
+)
 _DATASETS_PATH = _CACHE_DIR / "datasets.json"
 _DATASET_FILES_DIR = _CACHE_DIR / "datasets"
 _UPLOADS_DIR = _CACHE_DIR / "uploads"
@@ -72,16 +74,29 @@ class UploadRecord:
 class MCPRegistry:
     """Small persistent registry for MCP dataset, run, and upload handles."""
 
-    def __init__(self) -> None:
-        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        _DATASET_FILES_DIR.mkdir(parents=True, exist_ok=True)
-        _UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-        _RUNS_DIR.mkdir(parents=True, exist_ok=True)
-        _LOCK_PATH.touch(exist_ok=True)
+    def __init__(self, cache_dir: Path | str | None = None) -> None:
+        if cache_dir is not None:
+            resolved_cache = Path(cache_dir)
+        elif os.environ.get("PHIL_DATASETS_DIR"):
+            resolved_cache = Path(os.environ["PHIL_DATASETS_DIR"])
+        else:
+            resolved_cache = _CACHE_DIR
+        self._cache_dir = resolved_cache
+        self._datasets_path = self._cache_dir / "datasets.json"
+        self._dataset_files_dir = self._cache_dir / "datasets"
+        self._uploads_dir = self._cache_dir / "uploads"
+        self._runs_dir = self._cache_dir / "runs"
+        self._lock_path = self._cache_dir / ".registry.lock"
+
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        self._dataset_files_dir.mkdir(parents=True, exist_ok=True)
+        self._uploads_dir.mkdir(parents=True, exist_ok=True)
+        self._runs_dir.mkdir(parents=True, exist_ok=True)
+        self._lock_path.touch(exist_ok=True)
 
     @property
     def cache_dir(self) -> Path:
-        return _CACHE_DIR
+        return self._cache_dir
 
     def register_dataset(self, path: str) -> DatasetRecord:
         resolved = Path(path).expanduser().resolve(strict=True)
@@ -207,23 +222,23 @@ class MCPRegistry:
             return self._load_datasets_unlocked()
 
     def _load_datasets_unlocked(self) -> dict[str, dict]:
-        if not _DATASETS_PATH.exists():
+        if not self._datasets_path.exists():
             return {}
-        return json.loads(_DATASETS_PATH.read_text())
+        return json.loads(self._datasets_path.read_text())
 
     def _run_path(self, run_id: str) -> Path:
-        return _RUNS_DIR / f"{run_id}.json"
+        return self._runs_dir / f"{run_id}.json"
 
     def _upload_meta_path(self, upload_id: str) -> Path:
-        return _UPLOADS_DIR / f"{upload_id}.json"
+        return self._uploads_dir / f"{upload_id}.json"
 
     def _staging_path(self, upload_id: str) -> Path:
-        return _UPLOADS_DIR / f"{upload_id}.bin"
+        return self._uploads_dir / f"{upload_id}.bin"
 
     def _store_dataset_record_unlocked(self, record: DatasetRecord) -> None:
         datasets = self._load_datasets_unlocked()
         datasets[record.dataset_id] = asdict(record)
-        self._write_json(_DATASETS_PATH, datasets)
+        self._write_json(self._datasets_path, datasets)
 
     def _register_dataset_from_file_unlocked(
         self,
@@ -244,7 +259,7 @@ class MCPRegistry:
                 sha256_hash.update(byte_block)
 
         dataset_id = f"ds_{sha256_hash.hexdigest()[:12]}"
-        stored_path = _DATASET_FILES_DIR / f"{dataset_id}_{safe_name}"
+        stored_path = self._dataset_files_dir / f"{dataset_id}_{safe_name}"
         shutil.move(str(path), str(stored_path))
 
         stat = stored_path.stat()
@@ -262,7 +277,7 @@ class MCPRegistry:
 
     @contextmanager
     def _locked_registry(self):
-        with _PROCESS_LOCK, _LOCK_PATH.open("a+b") as handle:
+        with _PROCESS_LOCK, self._lock_path.open("a+b") as handle:
             self._acquire_file_lock(handle)
             try:
                 yield
@@ -330,3 +345,6 @@ class MCPRegistry:
         finally:
             if tmp_path is not None and tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
+
+
+DatasetRegistry = MCPRegistry
