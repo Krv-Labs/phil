@@ -30,7 +30,7 @@ from phil.phil import Phil
 from phil.transformers import PhilTransformer
 from phil.visualization import plot_mds
 
-__version__ = "1.1.0"
+__version__ = "0.1.0"
 __all__ = [
     "COLLAPSE_STRATEGIES",
     "ECT",
