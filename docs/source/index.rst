@@ -1,10 +1,20 @@
 .. _index:
 
+.. rst-class:: phil-sphinx-title
+
 ====
 Phil
 ====
 
-**Topological Imputation with Representative Selection**
+.. raw:: html
+
+   <div class="phil-hero">
+     <div class="phil-hero-row">
+       <img class="phil-hero-logo only-light" src="_static/phil-logo.svg" alt="Phil" />
+       <img class="phil-hero-logo only-dark" src="_static/phil-logo-dark.svg" alt="" aria-hidden="true" />
+     </div>
+     <p class="phil-tagline">Topological Imputation with Representative Selection</p>
+   </div>
 
 Phil generates multiple candidate imputations using configurable sklearn pipelines, scores them with ECT (Euler Characteristic Transform) descriptors, and selects the most representative imputation. Instead of picking a single imputation strategy, explore the space of possibilities and let topological methods guide the selection.
 

@@ -1,6 +1,14 @@
-# Phil
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/source/_static/phil-logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/source/_static/phil-logo.svg">
+    <img src="docs/source/_static/phil-logo.svg" alt="Phil" width="400">
+  </picture>
+</p>
 
-<p align="left">
+<h3 align="center">representation-guided imputation for missing tabular data</h3>
+
+<p align="center">
   <a href="https://pypi.org/project/philler/"><img src="https://img.shields.io/pypi/v/philler?color=3776AB&logo=python&logoColor=ffd43b" alt="PyPI"></a>
   <a href="https://pypi.org/project/philler/"><img src="https://img.shields.io/pypi/pyversions/philler" alt="Python versions"></a>
   <a href="https://github.com/Krv-Labs/phil/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Krv-Labs/phil" alt="License"></a>
