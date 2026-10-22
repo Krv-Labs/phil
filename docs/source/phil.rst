@@ -14,6 +14,11 @@ Phil Package API
    :undoc-members:
    :show-inheritance:
 
+.. automodule:: phil.diagnostics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. automodule:: phil.transformers
    :members:
    :undoc-members:
