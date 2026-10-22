@@ -2,6 +2,7 @@
 Agentic ECT signature distribution analysis and ensemble collapse strategies.
 
 Provides:
+
 1. ``COLLAPSE_STRATEGIES``: Declarative catalog of 6 ECT collapse methods
    (``barycenter``, ``trimmed_barycenter``, ``frechet_medoid``,
    ``euclidean_medoid``, ``mode_medoid``, ``cluster_barycenter``).
