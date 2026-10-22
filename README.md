@@ -14,19 +14,20 @@
   <a href="https://github.com/Krv-Labs/phil/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Krv-Labs/phil" alt="License"></a>
 </p>
 
-**Representation-guided imputation for missing tabular data** — PyPI package [`philler`](https://pypi.org/project/philler/) (import: `phil`).
+Phil fills missing values in tabular data by comparing several possible completions. It describes each candidate's structure with the Euler Characteristic Transform (ECT), then selects a candidate close to the ensemble's center. You can also inspect the candidates and combine them with an ensemble collapse strategy.
 
-**Development status:** Experimental (`0.x`). Public APIs may change between minor releases.
+**Install `philler`, import `phil`.** Requires Python 3.10 or newer. Phil is experimental (`0.x`); public APIs may change between minor releases.
 
-Phil runs a grid of imputation strategies, scores each candidate with an Euler Characteristic Transform (ECT) descriptor via the [`trailed`](https://pypi.org/project/trailed/) backend, and selects the most representative result.
-
-**Impute → Describe → Select → Transform**
-
-## Installation
+## Install
 
 ```bash
-pip install philler          # core library
-pip install "philler[mcp]"   # + FastMCP server for agents
+pip install philler
+```
+
+To use Phil from an AI assistant, install the optional MCP server:
+
+```bash
+pip install "philler[mcp]"
 ```
 
 ## Quick start
@@ -35,137 +36,104 @@ pip install "philler[mcp]"   # + FastMCP server for agents
 import pandas as pd
 from phil import Phil
 
-df = pd.read_csv("data_with_missing.csv")
+df = pd.DataFrame({
+    "x": [1.0, 2.0, None, 4.0, 5.0, 6.0],
+    "y": [2.0, None, 6.0, 8.0, 10.0, 12.0],
+})
 
-phil = Phil(samples=30, random_state=42)
-imputed_df = phil.fit(df)
-new_df = phil.transform(new_data)  # reuse fitted pipeline
+imputer = Phil(samples=10, random_state=42)
+completed = imputer.fit(df)
+print(completed)
 ```
 
-<details>
-<summary><strong>MCP server</strong> — run sweeps from Claude, Cursor, Gemini CLI, etc.</summary>
+`samples` limits how many grid candidates are explored. The result keeps the original columns and units, and observed values stay unchanged. Reuse the selected fitted pipeline with `imputer.transform(other_df)`, supplying the same columns.
 
-Install the `mcp` extra and start the server:
+Phil selects for structural representativeness. Assess the completed data against the needs of your downstream analysis.
 
-```bash
-pip install "philler[mcp]"
-phil-mcp
-# or ephemeral: uv tool run --from "philler[mcp]" phil-mcp
+## Explore the ensemble
+
+- **Choose a grid:** pass `param_grid="default"`, `"sampling"`, `"finance"`, `"healthcare"`, `"marketing"`, or `"engineering"` to `Phil`.
+- **Understand missing columns:** use `profile_predictability(df)` to examine empirical predictors and missingness patterns.
+- **Add domain knowledge:** `build_research_worksheet(df)` helps organize research for cited predictor sets, bounds, and covariance priors.
+- **Compare collapse strategies:** inspect the ensemble and choose a single candidate or pool several candidates without fitting them again.
+
+After the quick start above:
+
+```python
+comparison = imputer.collapse(strategy="auto", compare_all=True)
+completed = comparison.collapsed_df
+print(comparison.strategy)
+print(comparison.column_variability)
 ```
 
-Example Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+The default `Phil` selector chooses the candidate closest to the mean ECT descriptor. `collapse(strategy="auto")` uses distribution diagnostics to choose among six selection and pooling strategies. ECT computation uses the [`trailed`](https://pypi.org/project/trailed/) backend.
+
+See the [programmatic guide](https://docs.krv.ai/phil/userGuides/programmatic.html) for domain priors and the [advanced guide](https://docs.krv.ai/phil/userGuides/advanced.html) for collapse diagnostics.
+
+## Use with an AI assistant
+
+Phil's MCP server lets Claude, Cursor, Gemini, and other MCP clients run the workflow from a file path. A typical request is:
+
+> Use Phil to fill missing values in `/data/input.csv`. Inspect the candidate ensemble and export the result to `/data/completed.csv`.
+
+With `uv` installed, add this server to your MCP client's configuration:
 
 ```json
 {
   "mcpServers": {
     "phil": {
-      "command": "uv tool run",
-      "args": ["--from", "philler[mcp]", "phil-mcp"]
+      "command": "uv",
+      "args": ["tool", "run", "--from", "philler[mcp]", "phil-mcp"]
     }
   }
 }
 ```
 
-Key tools: `ingest_dataset`, `characterize_dataset`, `profile_predictability`, `generate_research_template`, `recommend_grid`, `list_grids`, `create_config`, `validate_config`, `run_imputation_sweep`, `diagnose_sweep`, `list_collapse_strategies`, `inspect_ect_distribution`, `collapse_ensemble`, `export_imputed_data`.
+The client must be able to find `uv`, and the server must be able to read the dataset path. You can also launch an installed server with `phil-mcp`.
 
-Agents can read `phil://docs/imputation-matrix` for grid comparison metadata, use `profile_predictability` + `generate_research_template` to separate empirically predictable columns from domain/literature priors (`DomainKnowledge`), and compare ECT signature collapse strategies (`barycenter`, `trimmed_barycenter`, `frechet_medoid`, `euclidean_medoid`, `mode_medoid`, `cluster_barycenter`, `auto`). Polars users write to Parquet and ingest the file path.
+The tools cover ingest, profiling, research templates, grid configuration, imputation sweeps, ensemble inspection, collapse, and export. For Polars data, write a Parquet file and ingest its path.
 
-See [`docs/source/userGuides/mcp.rst`](docs/source/userGuides/mcp.rst) for the full tool table and example dialog. Local end-to-end testing: [`demos/medical`](demos/medical/README.md).
+See the [MCP guide](https://docs.krv.ai/phil/userGuides/mcp.html) for tool details and the [medical demo](demos/medical/README.md) for a local walkthrough.
 
-</details>
+## Use in a scikit-learn pipeline
 
-<details>
-<summary><strong>Configuration</strong> — grids and ECT settings</summary>
-
-### Imputation grids
-
-Named grids via `GridGallery`:
-
-| Name          | Methods                                                     |
-| ------------- | ----------------------------------------------------------- |
-| `default`     | BayesianRidge, DecisionTree, RandomForest, GradientBoosting |
-| `sampling`    | DistributionImputer (empirical sampling)                    |
-| `finance`     | IterativeImputer, KNNImputer, SimpleImputer                 |
-| `healthcare`  | KNNImputer, SimpleImputer, IterativeImputer                 |
-| `marketing`   | SimpleImputer, KNNImputer, IterativeImputer                 |
-| `engineering` | SimpleImputer, KNNImputer, IterativeImputer                 |
-
-Custom grid:
+For numeric features, `PhilTransformer` can be the imputation step in a predictive pipeline:
 
 ```python
-from phil import Phil, ImputationConfig
-from sklearn.model_selection import ParameterGrid
-
-config = ImputationConfig(
-    methods=["KNNImputer"],
-    modules=["sklearn.impute"],
-    grids=[ParameterGrid({"n_neighbors": [3, 5, 7]})],
-)
-phil = Phil(param_grid=config)
-```
-
-### ECT descriptor
-
-```python
-from phil import Phil, ECTConfig
-
-phil = Phil(config=ECTConfig(num_thetas=64, radius=1.0, resolution=100, scale=500, normalize=True, seed=42))
-```
-
-</details>
-
-<details>
-<summary><strong>scikit-learn pipelines</strong></summary>
-
-```python
-from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import Pipeline
 from phil import PhilTransformer
 
-pipe = Pipeline([
-    ("imputer", PhilTransformer(samples=20, random_state=0)),
-    ("model", RandomForestClassifier()),
+pipeline = Pipeline([
+    ("impute", PhilTransformer(samples=10, random_state=42)),
+    ("model", RandomForestClassifier(random_state=42)),
 ])
-pipe.fit(X_train, y_train)
+
+pipeline.fit(df, [0, 0, 0, 1, 1, 1])
 ```
 
-</details>
+Phil returns categorical columns in their original form. Add an encoding step before models that require numeric inputs.
 
-<details>
-<summary><strong>What's new in v1.1.0</strong></summary>
+## Documentation and development
 
-- **FastMCP server** — `phil-mcp` exposes the imputation sweep pipeline as MCP tools for agents.
-- **Grid recommender** — `recommend_grid`, declarative `GridMetadata`, and the `phil://docs/imputation-matrix` resource.
-- **Medical demo** — [`demos/medical`](demos/medical/README.md) with covariate sampling, masked iterative imputation, and MDS visualization of descriptor space.
+- [User guides](https://docs.krv.ai/phil/) — installation, configuration, and examples.
+- [Changelog](CHANGELOG.md) — release notes and the reset to the experimental 0.x series.
+- [Agent guide](AGENTS.md) — package layout and contributor conventions.
 
-See [CHANGELOG.md](CHANGELOG.md) for full release notes.
-
-</details>
-
-<details>
-<summary><strong>Development</strong></summary>
+Install contributor dependencies and run the suite:
 
 ```bash
-uv sync --all-extras
+uv sync --group dev --group mcp --group docs
 uv run pytest -v
-uvx ruff format phil/ tests/
-uvx ruff check phil/ tests/
+uv run ruff check phil/
+uv run ruff format --check phil/
 ```
 
-Contributors: see [AGENTS.md](AGENTS.md) for package layout and design notes.
-
-</details>
-
-<details>
-<summary><strong>Documentation</strong></summary>
-
-Sphinx docs live under `docs/source`. Build locally:
+Build the documentation:
 
 ```bash
-uv run sphinx-build -M html docs/source docs/build
+uv run --group docs sphinx-build -M html docs/source docs/build
 ```
-
-</details>
 
 ---
 
