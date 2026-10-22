@@ -1,12 +1,13 @@
 [project]
 name = "philler"
-version = "1.1.0"
+version = "0.1.0"
 authors = [
     {name = "Krv Labs", email = "team@krv.ai"}
 ]
 description = "Phil: multiverse imputation powered by topology-based representation learning."
 readme = "README.md"
 requires-python = ">=3.10"
+classifiers = ["Development Status :: 3 - Alpha"]
 dependencies = [
     "pandas>=2.2.3",
     "pydantic>=2.10.6",

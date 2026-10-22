@@ -16,6 +16,8 @@
 
 **Representation-guided imputation for missing tabular data** — PyPI package [`philler`](https://pypi.org/project/philler/) (import: `phil`).
 
+**Development status:** Experimental (`0.x`). Public APIs may change between minor releases.
+
 Phil runs a grid of imputation strategies, scores each candidate with an Euler Characteristic Transform (ECT) descriptor via the [`trailed`](https://pypi.org/project/trailed/) backend, and selects the most representative result.
 
 **Impute → Describe → Select → Transform**
