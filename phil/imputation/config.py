@@ -7,21 +7,51 @@ from typing import Any
 from pydantic import BaseModel, Field
 from sklearn.model_selection import ParameterGrid
 
+ESTIMATOR_MAP: dict[str, tuple[str, str]] = {
+    "BayesianRidge": ("sklearn.linear_model", "BayesianRidge"),
+    "Ridge": ("sklearn.linear_model", "Ridge"),
+    "RandomForest": ("sklearn.ensemble", "RandomForestRegressor"),
+    "RandomForestRegressor": ("sklearn.ensemble", "RandomForestRegressor"),
+    "ExtraTrees": ("sklearn.ensemble", "ExtraTreesRegressor"),
+    "ExtraTreesRegressor": ("sklearn.ensemble", "ExtraTreesRegressor"),
+    "GradientBoosting": ("sklearn.ensemble", "GradientBoostingRegressor"),
+    "GradientBoostingRegressor": ("sklearn.ensemble", "GradientBoostingRegressor"),
+    "HistGradientBoosting": ("sklearn.ensemble", "HistGradientBoostingRegressor"),
+    "HistGradientBoostingRegressor": (
+        "sklearn.ensemble",
+        "HistGradientBoostingRegressor",
+    ),
+    "DecisionTree": ("sklearn.tree", "DecisionTreeRegressor"),
+    "DecisionTreeRegressor": ("sklearn.tree", "DecisionTreeRegressor"),
+    "KNN": ("sklearn.neighbors", "KNeighborsRegressor"),
+    "KNeighborsRegressor": ("sklearn.neighbors", "KNeighborsRegressor"),
+}
+
 
 class CovariateSubset(BaseModel):
     predictors: list[str]
     citations: list[str]
+    estimators: list[str] | None = None
+    sample_posterior: bool | None = None
+
+
+class VariableBounds(BaseModel):
+    min_value: float | None = None
+    max_value: float | None = None
+    distribution_family: str | None = None
+    citations: list[str] = Field(default_factory=list)
 
 
 class CovarianceMatrix(BaseModel):
     matrix: list[list[float]]
-    variables: list[str]
+    variables: list[str] = Field(default_factory=list)
     citations: list[str]
 
 
 class DomainKnowledge(BaseModel):
     covariate_subsets: dict[str, CovariateSubset] | None = None
     covariance_matrix: CovarianceMatrix | None = None
+    variable_bounds: dict[str, VariableBounds] | None = None
 
 
 class ImputationConfig(BaseModel):
